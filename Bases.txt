@@ -1,5 +1,4 @@
 ### **Plantilla para el Proyecto: Desarrollo de Herramientas de Pentesting con Python**
-
 ---
 
 #### **1. Portada**

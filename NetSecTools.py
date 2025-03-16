@@ -95,6 +95,7 @@ def open_reverse_shell(ip):
                 # Imprimimos la respuesta;
                 print(respuesta.decode()) 
 
+
 def open_network_scan(ip):
     if not ip:
         messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
