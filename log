@@ -1,0 +1,6 @@
+Deseado=desconocido(U)/Instalar/eliminaR/Purgar/retener(H)
+| Estado=No/Inst/ficheros-Conf/desempaqUetado/medio-conF/medio-inst(H)/espera-disparo(W)/pendienTe-disparo
+|/ Err?=(ninguno)/requiere-Reinst (Estado,Err: mayúsc.=malo)
+||/ Nombre         Versión      Arquitectura Descripción
++++-==============-============-============-========================================
+un  python3-venv   <ninguna>    <ninguna>    (no hay ninguna descripción disponible)
