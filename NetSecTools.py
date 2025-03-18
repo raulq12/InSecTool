@@ -1,147 +1,216 @@
+import subprocess
+import sys
+
+def install_dependencies():
+    """Ejecuta requirements.py para instalar dependencias"""
+    try:
+        subprocess.run([sys.executable, "requirements.py"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error al instalar dependencias: {e}")
+        sys.exit(1)
+
+# Verifica e instala dependencias antes de continuar
+install_dependencies()
+
+print("Todas las dependencias están instaladas. Iniciando NetSecTools...")
 import tkinter as tk
 from tkinter import ttk, messagebox
 import socket
+from scapy.layers.l2 import Ether, ARP
+from scapy.sendrecv import srp
+import netifaces
+import socket
 
-# Función para escanear puertos
-def scan_ports(ip, start_port, end_port):
-    open_ports = []
-    for port in range(start_port, end_port + 1):
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.5)  # Tiempo de espera para la conexión
-            result = sock.connect_ex((ip, port))
-            if result == 0:  # Si el puerto está abierto
-                open_ports.append(port)
-            sock.close()
-        except Exception as e:
-            print(f"Error escaneando puerto {port}: {e}")
-    return open_ports
+def get_network_range():
+    """Obtiene el rango de la red automáticamente."""
+    try:
+        # Obtener todas las interfaces de red
+        interfaces = netifaces.interfaces()
+        
+        for interface in interfaces:
+            if interface == "lo":  # Ignorar la interfaz de loopback
+                continue
+            
+            # Obtener las direcciones IP de la interfaz
+            addresses = netifaces.ifaddresses(interface)
+            if netifaces.AF_INET in addresses:
+                ip_info = addresses[netifaces.AF_INET][0]
+                if "addr" in ip_info and "netmask" in ip_info:
+                    ip = ip_info["addr"]
+                    netmask = ip_info["netmask"]
+                    
+                    # Calcular el rango de la red
+                    if ip and netmask:
+                        # Convertir la IP y la máscara a formato binario
+                        ip_parts = list(map(int, ip.split(".")))
+                        mask_parts = list(map(int, netmask.split(".")))
+                        
+                        # Calcular la dirección de red
+                        network_parts = [ip_parts[i] & mask_parts[i] for i in range(4)]
+                        network = ".".join(map(str, network_parts))
+                        
+                        # Calcular el rango (asumiendo una máscara /24 por defecto)
+                        if mask_parts == [255, 255, 255, 0]:  # Máscara /24
+                            return f"{network}/24"
+                        else:
+                            # Si la máscara no es /24, devolver el rango completo
+                            return f"{network}/{sum(bin(int(x)).count('1') for x in netmask.split('.'))}"
+        
+        # Si no se encontró ninguna interfaz válida
+        return None
+    except Exception as e:
+        print(f"Error al obtener el rango de la red: {e}")
+        return None
+import nmap
 
-def toggle_ip_input(command):
-    for widget in target_frame.winfo_children():
-        widget.destroy()
+def scan_ports(ip, start_port=1, end_port=1024):
+    """
+    Escanea los puertos de una IP utilizando Nmap.
     
-    if command:
-        target_label = tk.Label(target_frame, text="IP Objetivo:", font=("Helvetica", 12), bg="#1e1e1e", fg="#ffffff")
-        target_label.pack(pady=(10, 5))
-        
-        ip_entry = tk.Entry(target_frame, font=("Helvetica", 12), width=25, bg="#2d2d2d", fg="#ffffff", bd=0, insertbackground="white")
-        ip_entry.pack(pady=5, ipady=5, fill=tk.X, padx=20)
-        
-        start_button = ttk.Button(target_frame, text="Iniciar", command=lambda: command(ip_entry.get()), style="Accent.TButton")
-        start_button.pack(pady=10, ipady=5, fill=tk.X, padx=20)
-        
-        target_frame.pack(pady=10, fill=tk.X)
-    else:
-        target_frame.pack_forget()
+    :param ip: Dirección IP a escanear.
+    :param start_port: Puerto inicial del rango (por defecto 1).
+    :param end_port: Puerto final del rango (por defecto 1024).
+    :return: Lista de puertos abiertos.
+    """
+    try:
+        # Crear un objeto nmap.PortScanner
+        nm = nmap.PortScanner()
 
+        # Definir el rango de puertos
+        port_range = f"{start_port}-{end_port}"
+
+        # Ejecutar el escaneo
+        nm.scan(ip, port_range, arguments='-sS')  # Escaneo SYN (half-open)
+
+        # Obtener los puertos abiertos
+        open_ports = []
+        for host in nm.all_hosts():
+            for proto in nm[host].all_protocols():
+                ports = nm[host][proto].keys()
+                for port in ports:
+                    if nm[host][proto][port]['state'] == 'open':
+                        open_ports.append(port)
+
+        return open_ports
+    except Exception as e:
+        print(f"Error al escanear puertos: {e}")
+        return []
+    
 def open_port_scanner(ip):
+    """Escanea los puertos de una IP y muestra los resultados."""
     if not ip:
         messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
         return
     
     # Escanear puertos
     start_port = 1
-    end_port = 12  # Rango de puertos a escanear
+    end_port = 1024  # Rango de puertos a escanear
     open_ports = scan_ports(ip, start_port, end_port)
     
     if open_ports:
-        messagebox.showinfo("Escaneo de Puertos", f"Puertos abiertos en {ip}:\n{', '.join(map(str, open_ports))}")
+        result_text = f"Puertos abiertos en {ip}:\n{', '.join(map(str, open_ports))}"
+        
+        # Mostrar el resultado con la opción de descargar
+        mostrar_resultado_con_descarga(
+            titulo="Escaneo de Puertos",
+            mensaje=result_text,
+            nombre_archivo=f"escaneopuertos_{ip}.txt"
+        )
     else:
         messagebox.showinfo("Escaneo de Puertos", f"No se encontraron puertos abiertos en {ip}.")
 
-def open_sniffer():
-    toggle_ip_input(None)
-    messagebox.showinfo("Sniffer de Red", "Herramienta de sniffer de red seleccionada.")
+def mostrar_resultado_con_descarga(titulo, mensaje, nombre_archivo):
+    """
+    Muestra una ventana de mensaje con dos botones: "Salir" y "Descargar y Salir".
+    Si se hace clic en "Descargar y Salir", se crea un archivo .txt con el mensaje.
+    
+    :param titulo: Título de la ventana.
+    :param mensaje: Mensaje a mostrar en la ventana.
+    :param nombre_archivo: Nombre del archivo .txt a crear.
+    """
+    def descargar_y_salir():
+        # Crear el archivo .txt
+        with open(nombre_archivo, "w", encoding="utf-8") as archivo:
+            archivo.write(mensaje)
+        ventana.destroy()  # Cerrar la ventana
 
-def open_reverse_shell(ip):
-    if not ip:
-        messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
+    def salir():
+        ventana.destroy()  # Cerrar la ventana sin hacer nada
+
+    # Crear una ventana personalizada
+    ventana = tk.Toplevel()
+    ventana.title(titulo)
+    
+    # Mostrar el mensaje
+    mensaje_label = tk.Label(ventana, text=mensaje, font=("Helvetica", 12), padx=20, pady=20)
+    mensaje_label.pack()
+
+    # Crear los botones
+    boton_descargar = tk.Button(ventana, text="Descargar y Salir", command=descargar_y_salir, bg="#4CAF50", fg="white")
+    boton_descargar.pack(side=tk.LEFT, padx=10, pady=10)
+
+    boton_salir = tk.Button(ventana, text="Salir", command=salir, bg="#FF5722", fg="white")
+    boton_salir.pack(side=tk.RIGHT, padx=10, pady=10)
+
+    # Centrar la ventana en la pantalla
+    ventana.update_idletasks()
+    ancho = ventana.winfo_width()
+    alto = ventana.winfo_height()
+    x = (ventana.winfo_screenwidth() // 2) - (ancho // 2)
+    y = (ventana.winfo_screenheight() // 2) - (alto // 2)
+    ventana.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+    # Hacer que la ventana sea modal
+    ventana.grab_set()
+    ventana.wait_window()
+
+def scan_network(ip_range):
+    """
+    Escanea la red en busca de dispositivos activos.
+    :param ip_range: Rango de IPs a escanear (ej. "192.168.1.0/24").
+    :return: Lista de dispositivos encontrados con sus IPs y MACs.
+    """
+    try:
+        # Crear una solicitud ARP
+        arp = ARP(pdst=ip_range)
+        ether = Ether(dst="ff:ff:ff:ff:ff:ff")
+        packet = ether / arp
+
+        # Enviar el paquete y recibir la respuesta
+        result = srp(packet, timeout=2, verbose=0)[0]
+
+        # Procesar la respuesta
+        devices = []
+        for sent, received in result:
+            devices.append({'ip': received.psrc, 'mac': received.hwsrc})
+        return devices
+    except Exception as e:
+        print(f"Error al escanear la red: {e}")
+        return []
+
+def open_network_scan():
+    """Escanea la red y muestra los dispositivos encontrados."""
+    # Obtener el rango de la red automáticamente
+    ip_range = get_network_range()
+    if not ip_range:
+        messagebox.showerror("Error", "No se pudo detectar la red. Asegúrate de estar conectado a una red.")
         return
 
+    # Escanear la red
+    devices = scan_network(ip_range)
+    if devices:
+        result_text = f"Dispositivos encontrados en la red {ip_range}:\n\n"
+        for device in devices:
+            result_text += f"IP: {device['ip']}, MAC: {device['mac']}\n"
+        
+        # Mostrar el resultado con la opción de descargar
+        mostrar_resultado_con_descarga(
+            titulo="Detección de Máquinas",
+            mensaje=result_text,
+            nombre_archivo="escaneored.txt"
+        )
     else:
-        from socket import socket
-        messagebox.showinfo("Shell Inversa", f"Conectando a {ip}...")
-
-
-        # Definimos la dirección y puerto del servidor (Siempre de la máquina víctima)
-        server_address = (ip)
-
-        # Creamos el socket cliente, ya que restablecemos la conexión a cada comando que se ejecute
-        client_socket = socket()
-        client_socket.connect(server_address)
-        estado = True
-
-        while estado:
-
-            # Solicitamos al usuario que introduzca un comando
-            comando_enviar = input("Introduce el comando que quieras enviar a la máquina víctima (o 'exit' para salir): ")
-            
-
-            # Si el usuario introduce "exit", cerramos la conexión y salimos del bucle
-            if comando_enviar == 'exit':
-                # Le decimos al servidor que la conexion la cerramos:
-                client_socket.send(comando_enviar.encode())
-                # Cerramos el socket, que se volverá a abrir al inicio del bucle:
-                client_socket.close()
-                estado = False
-            else:
-                # Enviamos el comando a la máquina víctima:
-                client_socket.send(comando_enviar.encode())
-
-                # Esperamos a recibir la respuesta de la víctima y lo guardamos en la variable respuesta.
-                respuesta = client_socket.recv(4096)
-
-                # Imprimimos la respuesta;
-                print(respuesta.decode()) 
-
-
-def open_network_scan(ip):
-    if not ip:
-        messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
-        return
-    messagebox.showinfo("Detección de Máquinas", f"Escaneando red en {ip}...")
-
-def open_ddos_attack(ip):
-    if not ip:
-        messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
-        return
-    messagebox.showinfo("Ataque DDoS", f"Iniciando ataque DDoS contra {ip}...")
-
-def open_brute_force(ip):
-    if not ip:
-        messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
-        return
-    messagebox.showinfo("Fuerza Bruta", f"Iniciando ataque de fuerza bruta en {ip}...")
-
-def open_mitm(ip):
-    if not ip:
-        messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
-        return
-    messagebox.showinfo("Man in the Middle", f"Iniciando ataque MITM en {ip}...")
-
-def open_keylogger():
-    toggle_ip_input(None)
-    messagebox.showinfo("Keylogger", "Herramienta de keylogger seleccionada.")
-
-def reverse_shell_command():
-    toggle_ip_input(open_reverse_shell)
-
-def port_scanner_command():
-    toggle_ip_input(open_port_scanner)
-
-def network_scan_command():
-    toggle_ip_input(open_network_scan)
-
-def ddos_attack_command():
-    toggle_ip_input(open_ddos_attack)
-
-def brute_force_command():
-    toggle_ip_input(open_brute_force)
-
-def mitm_command():
-    toggle_ip_input(open_mitm)
-
+        messagebox.showinfo("Detección de Máquinas", "No se encontraron dispositivos.")
 # Configuración de la ventana principal
 root = tk.Tk()
 root.title("NetSecTools - Pentesting")
@@ -160,24 +229,20 @@ style.map("Accent.TButton", background=[("active", "#E64A19")])
 header_label = tk.Label(root, text="NetSecTools", font=("Helvetica", 24, "bold"), bg="#1e1e1e", fg="#4CAF50")
 header_label.pack(pady=20)
 
-# Frame para la entrada de IP
-target_frame = tk.Frame(root, bg="#1e1e1e")
-target_frame.pack_forget()
-
 # Frame para los botones
 button_frame = tk.Frame(root, bg="#1e1e1e")
 button_frame.pack(pady=10)
 
 # Botones
 buttons = [
-    ("Escaneo de Puertos", port_scanner_command),
-    ("Sniffer de Red", open_sniffer),
-    ("Shell Inversa", reverse_shell_command),
-    ("Detección de Máquinas", network_scan_command),
-    ("Ataque DDoS", ddos_attack_command),
-    ("Fuerza Bruta", brute_force_command),
-    ("Man in the Middle", mitm_command),
-    ("Keylogger", open_keylogger),
+    ("Escaneo de Puertos", lambda: messagebox.showinfo("Escaneo de Puertos", "Función no implementada.")),
+    ("Sniffer de Red", lambda: messagebox.showinfo("Sniffer de Red", "Función no implementada.")),
+    ("Shell Inversa", lambda: messagebox.showinfo("Shell Inversa", "Función no implementada.")),
+    ("Detección de Máquinas", open_network_scan),
+    ("Ataque DDoS", lambda: messagebox.showinfo("Ataque DDoS", "Función no implementada.")),
+    ("Fuerza Bruta", lambda: messagebox.showinfo("Fuerza Bruta", "Función no implementada.")),
+    ("Man in the Middle", lambda: messagebox.showinfo("Man in the Middle", "Función no implementada.")),
+    ("Keylogger", lambda: messagebox.showinfo("Keylogger", "Función no implementada.")),
 ]
 
 # Organización de los botones en filas de 2
