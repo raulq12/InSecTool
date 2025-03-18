@@ -181,7 +181,7 @@ buttons = [
 ]
 
 # Organización de los botones en filas de 2
-for i in range(0, len(buttons), 3):
+for i in range(0, len(buttons), 2):
     row_frame = tk.Frame(button_frame, bg="#1e1e1e")
     row_frame.pack(fill=tk.X, padx=20, pady=5)
     for j in range(2):
