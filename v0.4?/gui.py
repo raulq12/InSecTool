@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from functions import open_reverse_shell, open_port_scanner, open_network_scan
+from functions import open_reverse_shell, open_port_scanner, open_network_scan, keylogger
 from utils import mostrar_resultado_con_descarga
 
 def start_gui():
@@ -102,7 +102,7 @@ def start_gui():
         ("Ataque DDoS", lambda: messagebox.showinfo("Ataque DDoS", "Función no implementada.")),
         ("Fuerza Bruta", lambda: messagebox.showinfo("Fuerza Bruta", "Función no implementada.")),
         ("Man in the Middle", lambda: messagebox.showinfo("Man in the Middle", "Función no implementada.")),
-        ("Keylogger", lambda: messagebox.showinfo("Keylogger", "Función no implementada.")),
+        ("Keylogger", keylogger),
     ]
 
     # Organización de los botones en filas de 2

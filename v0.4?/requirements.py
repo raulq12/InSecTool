@@ -86,7 +86,7 @@ def is_python_package_installed(package_name):
 
 def install_python_packages():
     """Instala paquetes de Python globalmente si no están instalados"""
-    packages = ["python-nmap", "scapy"]
+    packages = ["python-nmap", "scapy", "keyboard"]
     needs_install = False
 
     # Verificar si falta algún paquete de Python

