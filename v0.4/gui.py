@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import platform
+import os
 
 # Importamos las funciones de manera condicional para manejar posibles errores
 def import_functions():
@@ -25,13 +27,31 @@ def start_gui():
     root.geometry("500x600")  # Aumentamos el tamaño para acomodar los nuevos elementos
     root.configure(bg="#1e1e1e")
 
-    # Estilos personalizados
+    # Estilos personalizados - con manejo especial para Windows
     style = ttk.Style()
-    style.theme_use("clam")
-    style.configure("TButton", font=("Helvetica", 12), padding=10, background="#4CAF50", foreground="white", borderwidth=0)
-    style.map("TButton", background=[("active", "#45a049")])
-    style.configure("Accent.TButton", background="#FF5722", foreground="white")
-    style.map("Accent.TButton", background=[("active", "#E64A19")])
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        # En Windows, el tema 'clam' podría no estar disponible
+        print("Tema 'clam' no disponible, usando tema predeterminado.")
+        available_themes = style.theme_names()
+        if available_themes:
+            print(f"Temas disponibles: {', '.join(available_themes)}")
+            style.theme_use(available_themes[0])  # Usar el primer tema disponible
+    
+    # Configurar estilos (compatible con Windows)
+    style.configure("TButton", font=("Helvetica", 12), padding=10)
+    style.configure("Accent.TButton")
+    
+    # Intentar aplicar colores si es posible
+    try:
+        style.configure("TButton", background="#4CAF50", foreground="white")
+        style.map("TButton", background=[("active", "#45a049")])
+        style.configure("Accent.TButton", background="#FF5722", foreground="white")
+        style.map("Accent.TButton", background=[("active", "#E64A19")])
+    except Exception as e:
+        print(f"No se pudieron aplicar todos los estilos: {e}")
+        print("La aplicación continuará con estilos básicos.")
 
     # Encabezado
     header_label = tk.Label(root, text="NetSecTools", font=("Helvetica", 24, "bold"), bg="#1e1e1e", fg="#4CAF50")
@@ -127,7 +147,13 @@ def start_gui():
         for j in range(2):
             if i + j < len(buttons):
                 text, command = buttons[i + j]
-                btn = ttk.Button(row_frame, text=text, command=command, style="TButton")
+                # En Windows, podríamos necesitar usar botones normales en lugar de ttk
+                if platform.system() == "Windows":
+                    btn = tk.Button(row_frame, text=text, command=command, 
+                                   bg="#4CAF50", fg="white", font=("Helvetica", 12),
+                                   padx=10, pady=10)
+                else:
+                    btn = ttk.Button(row_frame, text=text, command=command, style="TButton")
                 btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
 
     root.mainloop()
