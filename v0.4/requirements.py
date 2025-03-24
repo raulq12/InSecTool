@@ -34,6 +34,12 @@ def print_info(message):
     else:
         print(f"Info: {message}")
 
+def print_warning(message):
+    if Colors.use_colors():
+        print(f"{Colors.YELLOW}Advertencia: {message}{Colors.RESET}")
+    else:
+        print(f"Advertencia: {message}")
+
 def run_command(command, error_message):
     try:
         subprocess.run(command, shell=True, check=True)
@@ -106,7 +112,7 @@ def check_python_nmap_compatibility():
         scanner.scan('127.0.0.1', '22-80')
         return True
     except Exception as e:
-        print_info(f"Advertencia: python-nmap está instalado pero puede haber problemas de compatibilidad: {e}")
+        print_warning(f"python-nmap está instalado pero puede haber problemas de compatibilidad: {e}")
         return True  # Devolvemos True de todos modos para continuar
 
 def install_system_dependencies():
@@ -190,6 +196,12 @@ def is_python_package_installed(package_name):
                 return True
             except ImportError:
                 pass
+        elif package_name == "netifaces":
+            try:
+                import netifaces
+                return True
+            except ImportError:
+                pass
         
         # Si no se puede importar, verificamos con pip
         python_cmd = "python" if is_windows() else "python3"
@@ -227,8 +239,8 @@ def install_python_packages():
             ):
                 sys.exit(1)
     
-    # Corregido: Usamos python-nmap en lugar de nmap
-    packages = ["python-nmap", "scapy", "keyboard"]
+    # Lista actualizada de paquetes incluyendo netifaces
+    packages = ["python-nmap", "scapy", "keyboard", "netifaces"]
     needs_install = False
 
     # Verificar si falta algún paquete de Python
@@ -240,35 +252,72 @@ def install_python_packages():
     # Instalar solo si es necesario
     if needs_install:
         print_info("Instalando paquetes de Python...")
-        try:
-            # Instalamos los paquetes uno por uno para mejor manejo de errores
-            for package in packages:
-                if not is_python_package_installed(package):
-                    print_info(f"Instalando {package}...")
-                    cmd = f"{python_cmd} -m pip install {package}"
-                    try:
-                        subprocess.run(cmd, shell=True, check=True)
-                    except subprocess.CalledProcessError:
-                        # Si falla, intentamos con métodos alternativos según el sistema
-                        if is_windows():
-                            print_info(f"Reintentando instalar {package} con privilegios elevados...")
-                            if not run_command(
-                                f'powershell -Command "Start-Process \"{python_cmd}\" -ArgumentList \"-m pip install {package}\" -Verb RunAs"',
-                                f"Fallo al instalar {package}"
-                            ):
-                                print_error(f"No se pudo instalar {package}. Intenta instalarlo manualmente.")
-                                if package == "python-nmap":
-                                    print_info("Asegúrate de que Nmap esté instalado correctamente en tu sistema.")
-                        else:
-                            print_info(f"Reintentando instalar {package} con --break-system-packages...")
-                            if not run_command(
-                                f"{python_cmd} -m pip install --break-system-packages {package}",
-                                f"Fallo al instalar {package}"
-                            ):
-                                print_error(f"No se pudo instalar {package}. Intenta instalarlo manualmente.")
-        except Exception as e:
-            print_error(f"Error al instalar paquetes: {e}")
-            sys.exit(1)
+        
+        # En Windows, verificar si tenemos las herramientas de compilación para netifaces
+        if is_windows() and not is_python_package_installed("netifaces"):
+            print_info("El paquete netifaces requiere herramientas de compilación en Windows.")
+            print_info("Intentando instalar una versión precompilada...")
+            
+            # Intentar instalar wheel precompilado si está disponible
+            try:
+                # Determinar la versión de Python y arquitectura
+                python_version = platform.python_version()[:3].replace(".", "")
+                architecture = "win32" if platform.architecture()[0] == "32bit" else "win_amd64"
+                
+                # Intentar instalar con pip directamente primero
+                cmd = f"{python_cmd} -m pip install netifaces"
+                try:
+                    subprocess.run(cmd, shell=True, check=True)
+                    print_success("netifaces instalado correctamente.")
+                except subprocess.CalledProcessError:
+                    print_warning("No se pudo instalar netifaces directamente.")
+                    print_info("Es posible que necesites instalar Visual C++ Build Tools.")
+                    print_info("Visita: https://visualstudio.microsoft.com/visual-cpp-build-tools/")
+                    print_info("Durante la instalación, selecciona 'Desarrollo de escritorio con C++'")
+                    
+                    # Preguntar si desea continuar sin netifaces
+                    response = input("¿Deseas continuar sin instalar netifaces? (s/n): ")
+                    if response.lower() != 's':
+                        sys.exit(1)
+            except Exception as e:
+                print_error(f"Error al instalar netifaces: {e}")
+                print_info("Es posible que necesites instalar Visual C++ Build Tools.")
+                print_info("Visita: https://visualstudio.microsoft.com/visual-cpp-build-tools/")
+                
+                # Preguntar si desea continuar sin netifaces
+                response = input("¿Deseas continuar sin instalar netifaces? (s/n): ")
+                if response.lower() != 's':
+                    sys.exit(1)
+        
+        # Instalar los demás paquetes uno por uno
+        for package in packages:
+            # Saltamos netifaces en Windows si ya lo intentamos instalar arriba
+            if is_windows() and package == "netifaces":
+                continue
+                
+            if not is_python_package_installed(package):
+                print_info(f"Instalando {package}...")
+                cmd = f"{python_cmd} -m pip install {package}"
+                try:
+                    subprocess.run(cmd, shell=True, check=True)
+                except subprocess.CalledProcessError:
+                    # Si falla, intentamos con métodos alternativos según el sistema
+                    if is_windows():
+                        print_info(f"Reintentando instalar {package} con privilegios elevados...")
+                        if not run_command(
+                            f'powershell -Command "Start-Process \"{python_cmd}\" -ArgumentList \"-m pip install {package}\" -Verb RunAs"',
+                            f"Fallo al instalar {package}"
+                        ):
+                            print_error(f"No se pudo instalar {package}. Intenta instalarlo manualmente.")
+                            if package == "python-nmap":
+                                print_info("Asegúrate de que Nmap esté instalado correctamente en tu sistema.")
+                    else:
+                        print_info(f"Reintentando instalar {package} con --break-system-packages...")
+                        if not run_command(
+                            f"{python_cmd} -m pip install --break-system-packages {package}",
+                            f"Fallo al instalar {package}"
+                        ):
+                            print_error(f"No se pudo instalar {package}. Intenta instalarlo manualmente.")
     else:
         print_info("Todos los paquetes de Python están instalados.")
     
