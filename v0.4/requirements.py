@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import platform
 
 class Colors:
     RED = "\033[91m"
@@ -8,14 +9,28 @@ class Colors:
     BLUE = "\033[94m"
     RESET = "\033[0m"
 
+    @staticmethod
+    def use_colors():
+        # En Windows, los colores ANSI solo funcionan en terminales modernas o con módulos especiales
+        return platform.system() != "Windows" or "ANSICON" in os.environ
+
 def print_error(message):
-    print(f"{Colors.RED}Error: {message}{Colors.RESET}", file=sys.stderr)
+    if Colors.use_colors():
+        print(f"{Colors.RED}Error: {message}{Colors.RESET}", file=sys.stderr)
+    else:
+        print(f"Error: {message}", file=sys.stderr)
 
 def print_success(message):
-    print(f"{Colors.GREEN}Éxito: {message}{Colors.RESET}")
+    if Colors.use_colors():
+        print(f"{Colors.GREEN}Éxito: {message}{Colors.RESET}")
+    else:
+        print(f"Éxito: {message}")
 
 def print_info(message):
-    print(f"{Colors.BLUE}Info: {message}{Colors.RESET}")
+    if Colors.use_colors():
+        print(f"{Colors.BLUE}Info: {message}{Colors.RESET}")
+    else:
+        print(f"Info: {message}")
 
 def run_command(command, error_message):
     try:
@@ -25,56 +40,91 @@ def run_command(command, error_message):
         print_error(f"{error_message}: {e}")
         return False
 
+def is_windows():
+    return platform.system() == "Windows"
+
 def is_package_installed(package_name):
     """Verifica si un paquete del sistema está instalado"""
+    if is_windows():
+        # En Windows no usamos dpkg, así que asumimos que no está instalado
+        # y lo manejaremos de otra manera
+        return False
+    else:
+        try:
+            subprocess.run(
+                f"dpkg -l {package_name}",
+                shell=True,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+def is_nmap_installed():
+    """Verifica si nmap está instalado en cualquier sistema operativo"""
     try:
         subprocess.run(
-            f"dpkg -l {package_name}",
+            "nmap --version",
             shell=True,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         return True
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
 def install_system_dependencies():
-    """Instala dependencias del sistema (nmap) si no están instaladas"""
-    packages = ["nmap", "python3-pip"]
-    needs_update = False
+    """Instala dependencias del sistema según el sistema operativo"""
+    if is_windows():
+        # En Windows, verificamos nmap
+        if not is_nmap_installed():
+            print_info("Nmap no está instalado en Windows.")
+            print_info("Por favor, descarga e instala Nmap desde: https://nmap.org/download.html")
+            print_info("Después de instalarlo, asegúrate de que esté en el PATH del sistema.")
+            response = input("¿Deseas continuar con la instalación de los paquetes de Python? (s/n): ")
+            if response.lower() != 's':
+                sys.exit(1)
+        else:
+            print_info("Nmap está instalado en Windows.")
+    else:
+        # En Linux/Unix
+        packages = ["nmap", "python3-pip"]
+        needs_update = False
 
-    # Verificar si falta algún paquete
-    for package in packages:
-        if not is_package_installed(package):
-            print_info(f"{package} no está instalado. Se instalará.")
-            needs_update = True
-
-    # Actualizar e instalar solo si es necesario
-    if needs_update:
-        print_info("Actualizando lista de paquetes...")
-        if not run_command(
-            "sudo apt update",
-            "Fallo al actualizar la lista de paquetes"
-        ):
-            sys.exit(1)
-
+        # Verificar si falta algún paquete
         for package in packages:
             if not is_package_installed(package):
-                print_info(f"Instalando {package}...")
-                if not run_command(
-                    f"sudo apt install -y {package}",
-                    f"Fallo al instalar {package}"
-                ):
-                    sys.exit(1)
-    else:
-        print_info("Todos los paquetes del sistema están instalados.")
+                print_info(f"{package} no está instalado. Se instalará.")
+                needs_update = True
+
+        # Actualizar e instalar solo si es necesario
+        if needs_update:
+            print_info("Actualizando lista de paquetes...")
+            if not run_command(
+                "sudo apt update",
+                "Fallo al actualizar la lista de paquetes"
+            ):
+                sys.exit(1)
+
+            for package in packages:
+                if not is_package_installed(package):
+                    print_info(f"Instalando {package}...")
+                    if not run_command(
+                        f"sudo apt install -y {package}",
+                        f"Fallo al instalar {package}"
+                    ):
+                        sys.exit(1)
+        else:
+            print_info("Todos los paquetes del sistema están instalados.")
 
 def is_pip_available():
     """Verifica si pip está disponible para Python 3"""
     try:
         subprocess.run(
-            "python3 -m pip --version",
+            "python -m pip --version" if is_windows() else "python3 -m pip --version",
             shell=True,
             check=True,
             stdout=subprocess.PIPE,
@@ -87,8 +137,9 @@ def is_pip_available():
 def is_python_package_installed(package_name):
     """Verifica si un paquete de Python está instalado"""
     try:
+        python_cmd = "python" if is_windows() else "python3"
         subprocess.run(
-            f"python3 -m pip show {package_name}",
+            f"{python_cmd} -m pip show {package_name}",
             shell=True,
             check=True,
             stdout=subprocess.PIPE,
@@ -100,14 +151,26 @@ def is_python_package_installed(package_name):
 
 def install_python_packages():
     """Instala paquetes de Python globalmente si no están instalados"""
+    python_cmd = "python" if is_windows() else "python3"
+    
     # Primero verificar si pip está disponible
     if not is_pip_available():
-        print_info("pip no está disponible. Instalando python3-pip...")
-        if not run_command(
-            "sudo apt update && sudo apt install -y python3-pip",
-            "Fallo al instalar python3-pip"
-        ):
-            sys.exit(1)
+        if is_windows():
+            print_info("pip no está disponible. Instalando pip...")
+            # En Windows, descargamos get-pip.py
+            if not run_command(
+                "curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && " + 
+                f"{python_cmd} get-pip.py",
+                "Fallo al instalar pip"
+            ):
+                sys.exit(1)
+        else:
+            print_info("pip no está disponible. Instalando python3-pip...")
+            if not run_command(
+                "sudo apt update && sudo apt install -y python3-pip",
+                "Fallo al instalar python3-pip"
+            ):
+                sys.exit(1)
     
     packages = ["python-nmap", "scapy", "keyboard"]
     needs_install = False
@@ -122,22 +185,39 @@ def install_python_packages():
     if needs_install:
         print_info("Instalando paquetes de Python...")
         try:
-            # Intentar primero sin --break-system-packages
-            cmd = "python3 -m pip install " + " ".join(packages)
+            # En Windows no usamos --break-system-packages
+            if is_windows():
+                cmd = f"{python_cmd} -m pip install " + " ".join(packages)
+            else:
+                # En Linux intentamos primero sin --break-system-packages
+                cmd = f"{python_cmd} -m pip install " + " ".join(packages)
+            
             subprocess.run(cmd, shell=True, check=True)
         except subprocess.CalledProcessError:
-            # Si falla, intentar con --break-system-packages
-            print_info("Reintentando con --break-system-packages...")
-            if not run_command(
-                "python3 -m pip install --break-system-packages " + " ".join(packages),
-                "Fallo al instalar paquetes de Python"
-            ):
-                sys.exit(1)
+            # Si falla en Linux, intentar con --break-system-packages
+            if not is_windows():
+                print_info("Reintentando con --break-system-packages...")
+                if not run_command(
+                    f"{python_cmd} -m pip install --break-system-packages " + " ".join(packages),
+                    "Fallo al instalar paquetes de Python"
+                ):
+                    sys.exit(1)
+            else:
+                # Si falla en Windows, intentar con privilegios elevados
+                print_info("Reintentando con privilegios elevados...")
+                print_info("Es posible que se abra un diálogo de control de cuentas de usuario.")
+                if not run_command(
+                    f"powershell -Command "Start-Process '{python_cmd}' -ArgumentList '-m pip install {' '.join(packages)}' -Verb RunAs"",
+                    "Fallo al instalar paquetes de Python"
+                ):
+                    sys.exit(1)
     else:
         print_info("Todos los paquetes de Python están instalados.")
 
 def main():
     try:
+        print_info(f"Sistema operativo detectado: {platform.system()}")
+        
         # Instalar dependencias del sistema (si es necesario)
         install_system_dependencies()
 
@@ -151,4 +231,5 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
+    import os  # Importamos os aquí para usar os.environ
     main()
