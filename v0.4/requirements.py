@@ -174,6 +174,7 @@ def install_python_packages():
             ):
                 sys.exit(1)
     
+    # Corregido: Usamos python-nmap en lugar de nmap
     packages = ["python-nmap", "scapy", "keyboard"]
     needs_install = False
 
@@ -187,29 +188,34 @@ def install_python_packages():
     if needs_install:
         print_info("Instalando paquetes de Python...")
         try:
-            # Comando básico de instalación
-            cmd = f"{python_cmd} -m pip install " + " ".join(packages)
-            subprocess.run(cmd, shell=True, check=True)
-        except subprocess.CalledProcessError:
-            # Manejo específico según el sistema operativo
-            if is_windows():
-                # En Windows, intentar con privilegios elevados
-                print_info("Reintentando con privilegios elevados...")
-                print_info("Es posible que se abra un diálogo de control de cuentas de usuario.")
-                # Usamos comillas simples para la cadena completa y escapamos las comillas internas
-                if not run_command(
-                    f'powershell -Command "Start-Process \"{python_cmd}\" -ArgumentList \"-m pip install {" ".join(packages)}\" -Verb RunAs"',
-                    "Fallo al instalar paquetes de Python"
-                ):
-                    sys.exit(1)
-            else:
-                # En Linux, intentar con --break-system-packages
-                print_info("Reintentando con --break-system-packages...")
-                if not run_command(
-                    f"{python_cmd} -m pip install --break-system-packages " + " ".join(packages),
-                    "Fallo al instalar paquetes de Python"
-                ):
-                    sys.exit(1)
+            # Instalamos los paquetes uno por uno para mejor manejo de errores
+            for package in packages:
+                if not is_python_package_installed(package):
+                    print_info(f"Instalando {package}...")
+                    cmd = f"{python_cmd} -m pip install {package}"
+                    try:
+                        subprocess.run(cmd, shell=True, check=True)
+                    except subprocess.CalledProcessError:
+                        # Si falla, intentamos con métodos alternativos según el sistema
+                        if is_windows():
+                            print_info(f"Reintentando instalar {package} con privilegios elevados...")
+                            if not run_command(
+                                f'powershell -Command "Start-Process \"{python_cmd}\" -ArgumentList \"-m pip install {package}\" -Verb RunAs"',
+                                f"Fallo al instalar {package}"
+                            ):
+                                print_error(f"No se pudo instalar {package}. Intenta instalarlo manualmente.")
+                                if package == "python-nmap":
+                                    print_info("Asegúrate de que Nmap esté instalado correctamente en tu sistema.")
+                        else:
+                            print_info(f"Reintentando instalar {package} con --break-system-packages...")
+                            if not run_command(
+                                f"{python_cmd} -m pip install --break-system-packages {package}",
+                                f"Fallo al instalar {package}"
+                            ):
+                                print_error(f"No se pudo instalar {package}. Intenta instalarlo manualmente.")
+        except Exception as e:
+            print_error(f"Error al instalar paquetes: {e}")
+            sys.exit(1)
     else:
         print_info("Todos los paquetes de Python están instalados.")
 
@@ -227,6 +233,8 @@ def main():
 
     except Exception as e:
         print_error(f"Error crítico: {e}")
+        if is_windows():
+            input("Presiona Enter para salir...")
         sys.exit(1)
 
 if __name__ == "__main__":
