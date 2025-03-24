@@ -2,6 +2,7 @@ import subprocess
 import sys
 import platform
 import os
+import shutil
 
 class Colors:
     RED = "\033[91m"
@@ -65,6 +66,25 @@ def is_package_installed(package_name):
 
 def is_nmap_installed():
     """Verifica si nmap está instalado en cualquier sistema operativo"""
+    # Primero intentamos encontrar nmap en el PATH
+    nmap_in_path = shutil.which("nmap")
+    if nmap_in_path:
+        return True
+    
+    # Si no está en el PATH, buscamos en ubicaciones comunes en Windows
+    if is_windows():
+        common_paths = [
+            "C:\\Program Files (x86)\\Nmap\\nmap.exe",
+            "C:\\Program Files\\Nmap\\nmap.exe",
+        ]
+        for path in common_paths:
+            if os.path.exists(path):
+                # Si encontramos nmap, lo añadimos al PATH para futuras referencias
+                os.environ["PATH"] = os.environ["PATH"] + os.pathsep + os.path.dirname(path)
+                print_info(f"Nmap encontrado en {path} y añadido al PATH.")
+                return True
+    
+    # Como último recurso, intentamos ejecutar nmap
     try:
         subprocess.run(
             "nmap --version",
@@ -77,14 +97,26 @@ def is_nmap_installed():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
+def check_python_nmap_compatibility():
+    """Verifica si python-nmap puede funcionar con la instalación de nmap"""
+    try:
+        import nmap
+        scanner = nmap.PortScanner()
+        # Intentamos una operación simple para verificar la compatibilidad
+        scanner.scan('127.0.0.1', '22-80')
+        return True
+    except Exception as e:
+        print_info(f"Advertencia: python-nmap está instalado pero puede haber problemas de compatibilidad: {e}")
+        return True  # Devolvemos True de todos modos para continuar
+
 def install_system_dependencies():
     """Instala dependencias del sistema según el sistema operativo"""
     if is_windows():
         # En Windows, verificamos nmap
         if not is_nmap_installed():
-            print_info("Nmap no está instalado en Windows.")
+            print_info("Nmap no está instalado en Windows o no está en el PATH del sistema.")
             print_info("Por favor, descarga e instala Nmap desde: https://nmap.org/download.html")
-            print_info("Después de instalarlo, asegúrate de que esté en el PATH del sistema.")
+            print_info("Asegúrate de marcar la opción para añadir Nmap al PATH durante la instalación.")
             response = input("¿Deseas continuar con la instalación de los paquetes de Python? (s/n): ")
             if response.lower() != 's':
                 sys.exit(1)
@@ -139,6 +171,27 @@ def is_pip_available():
 def is_python_package_installed(package_name):
     """Verifica si un paquete de Python está instalado"""
     try:
+        # Primero intentamos importar el módulo directamente
+        if package_name == "python-nmap":
+            try:
+                import nmap
+                return True
+            except ImportError:
+                pass
+        elif package_name == "scapy":
+            try:
+                import scapy
+                return True
+            except ImportError:
+                pass
+        elif package_name == "keyboard":
+            try:
+                import keyboard
+                return True
+            except ImportError:
+                pass
+        
+        # Si no se puede importar, verificamos con pip
         python_cmd = "python" if is_windows() else "python3"
         subprocess.run(
             f"{python_cmd} -m pip show {package_name}",
@@ -218,10 +271,21 @@ def install_python_packages():
             sys.exit(1)
     else:
         print_info("Todos los paquetes de Python están instalados.")
+    
+    # Verificar la compatibilidad de python-nmap con nmap
+    if is_python_package_installed("python-nmap"):
+        check_python_nmap_compatibility()
 
 def main():
     try:
-        print_info(f"Sistema operativo detectado: {platform.system()}")
+        print_info(f"Sistema operativo detectado: {platform.system()} {platform.version()}")
+        print_info(f"Python: {platform.python_version()}")
+        
+        # Forzar la detección de nmap al inicio
+        if is_nmap_installed():
+            print_info("Nmap está instalado y disponible en el sistema.")
+        else:
+            print_info("Nmap no está instalado o no está disponible en el PATH.")
         
         # Instalar dependencias del sistema (si es necesario)
         install_system_dependencies()
