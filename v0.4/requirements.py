@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import platform
+import os
 
 class Colors:
     RED = "\033[91m"
@@ -123,8 +124,9 @@ def install_system_dependencies():
 def is_pip_available():
     """Verifica si pip está disponible para Python 3"""
     try:
+        python_cmd = "python" if is_windows() else "python3"
         subprocess.run(
-            "python -m pip --version" if is_windows() else "python3 -m pip --version",
+            f"{python_cmd} -m pip --version",
             shell=True,
             check=True,
             stdout=subprocess.PIPE,
@@ -185,29 +187,26 @@ def install_python_packages():
     if needs_install:
         print_info("Instalando paquetes de Python...")
         try:
-            # En Windows no usamos --break-system-packages
-            if is_windows():
-                cmd = f"{python_cmd} -m pip install " + " ".join(packages)
-            else:
-                # En Linux intentamos primero sin --break-system-packages
-                cmd = f"{python_cmd} -m pip install " + " ".join(packages)
-            
+            # Comando básico de instalación
+            cmd = f"{python_cmd} -m pip install " + " ".join(packages)
             subprocess.run(cmd, shell=True, check=True)
         except subprocess.CalledProcessError:
-            # Si falla en Linux, intentar con --break-system-packages
-            if not is_windows():
-                print_info("Reintentando con --break-system-packages...")
+            # Manejo específico según el sistema operativo
+            if is_windows():
+                # En Windows, intentar con privilegios elevados
+                print_info("Reintentando con privilegios elevados...")
+                print_info("Es posible que se abra un diálogo de control de cuentas de usuario.")
+                # Usamos comillas simples para la cadena completa y escapamos las comillas internas
                 if not run_command(
-                    f"{python_cmd} -m pip install --break-system-packages " + " ".join(packages),
+                    f'powershell -Command "Start-Process \"{python_cmd}\" -ArgumentList \"-m pip install {" ".join(packages)}\" -Verb RunAs"',
                     "Fallo al instalar paquetes de Python"
                 ):
                     sys.exit(1)
             else:
-                # Si falla en Windows, intentar con privilegios elevados
-                print_info("Reintentando con privilegios elevados...")
-                print_info("Es posible que se abra un diálogo de control de cuentas de usuario.")
+                # En Linux, intentar con --break-system-packages
+                print_info("Reintentando con --break-system-packages...")
                 if not run_command(
-                    f"powershell -Command "Start-Process '{python_cmd}' -ArgumentList '-m pip install {' '.join(packages)}' -Verb RunAs"",
+                    f"{python_cmd} -m pip install --break-system-packages " + " ".join(packages),
                     "Fallo al instalar paquetes de Python"
                 ):
                     sys.exit(1)
@@ -231,5 +230,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    import os  # Importamos os aquí para usar os.environ
     main()
