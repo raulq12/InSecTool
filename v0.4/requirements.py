@@ -41,7 +41,7 @@ def is_package_installed(package_name):
 
 def install_system_dependencies():
     """Instala dependencias del sistema (nmap) si no están instaladas"""
-    packages = ["nmap"]
+    packages = ["nmap", "python3-pip"]
     needs_update = False
 
     # Verificar si falta algún paquete
@@ -70,6 +70,20 @@ def install_system_dependencies():
     else:
         print_info("Todos los paquetes del sistema están instalados.")
 
+def is_pip_available():
+    """Verifica si pip está disponible para Python 3"""
+    try:
+        subprocess.run(
+            "python3 -m pip --version",
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
 def is_python_package_installed(package_name):
     """Verifica si un paquete de Python está instalado"""
     try:
@@ -86,6 +100,15 @@ def is_python_package_installed(package_name):
 
 def install_python_packages():
     """Instala paquetes de Python globalmente si no están instalados"""
+    # Primero verificar si pip está disponible
+    if not is_pip_available():
+        print_info("pip no está disponible. Instalando python3-pip...")
+        if not run_command(
+            "sudo apt update && sudo apt install -y python3-pip",
+            "Fallo al instalar python3-pip"
+        ):
+            sys.exit(1)
+    
     packages = ["python-nmap", "scapy", "keyboard"]
     needs_install = False
 
@@ -98,11 +121,18 @@ def install_python_packages():
     # Instalar solo si es necesario
     if needs_install:
         print_info("Instalando paquetes de Python...")
-        if not run_command(
-            "python3 -m pip install --break-system-packages " + " ".join(packages),
-            "Fallo al instalar paquetes de Python"
-        ):
-            sys.exit(1)
+        try:
+            # Intentar primero sin --break-system-packages
+            cmd = "python3 -m pip install " + " ".join(packages)
+            subprocess.run(cmd, shell=True, check=True)
+        except subprocess.CalledProcessError:
+            # Si falla, intentar con --break-system-packages
+            print_info("Reintentando con --break-system-packages...")
+            if not run_command(
+                "python3 -m pip install --break-system-packages " + " ".join(packages),
+                "Fallo al instalar paquetes de Python"
+            ):
+                sys.exit(1)
     else:
         print_info("Todos los paquetes de Python están instalados.")
 
