@@ -1,159 +1,270 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-import platform
+from tkinter import ttk, messagebox, filedialog
+from functions import (
+    open_port_scanner,
+    open_reverse_shell,
+    open_network_scan,
+    open_ddos_attack,
+    open_brute_force,
+    open_mitm_attack,
+    open_sniffer,
+    keylogger
+)
+import threading
 import os
 
-# Importamos las funciones de manera condicional para manejar posibles errores
-def import_functions():
-    try:
-        from functions import open_reverse_shell, open_port_scanner, open_network_scan, keylogger
-        from utils import mostrar_resultado_con_descarga
-        return open_reverse_shell, open_port_scanner, open_network_scan, keylogger, mostrar_resultado_con_descarga
-    except ImportError as e:
-        print(f"Error al importar funciones: {e}")
-        print("Asegúrate de que los archivos functions.py y utils.py existan y sean accesibles.")
-        return None, None, None, None, None
+class NetSecToolsGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("NetSecTools")
+        self.root.geometry("700x600")
+        self.root.configure(bg="#f0f0f0")
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        # Frame principal
+        main_frame = tk.Frame(self.root, bg="#f0f0f0")
+        main_frame.pack(pady=20, padx=20, fill=tk.BOTH, expand=True)
+        
+        # Título
+        title = tk.Label(
+            main_frame,
+            text="NetSecTools - Pentesting Toolkit",
+            font=("Helvetica", 16, "bold"),
+            bg="#f0f0f0"
+        )
+        title.pack(pady=10)
+        
+        # Frame de botones
+        button_frame = tk.Frame(main_frame, bg="#f0f0f0")
+        button_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Botones de escaneo
+        scan_frame = tk.LabelFrame(button_frame, text="Escaneo", bg="#f0f0f0")
+        scan_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
+        
+        ttk.Button(
+            scan_frame,
+            text="Escaneo de Puertos",
+            command=self.show_port_scanner
+        ).pack(pady=5, fill=tk.X)
+        
+        ttk.Button(
+            scan_frame,
+            text="Escaneo de Red",
+            command=open_network_scan
+        ).pack(pady=5, fill=tk.X)
+        
+        ttk.Button(
+            scan_frame,
+            text="Sniffer de Paquetes",
+            command=self.show_sniffer
+        ).pack(pady=5, fill=tk.X)
+        
+        # Botones de ataques
+        attack_frame = tk.LabelFrame(button_frame, text="Ataques", bg="#f0f0f0")
+        attack_frame.grid(row=0, column=1, padx=10, pady=5, sticky="nsew")
+        
+        ttk.Button(
+            attack_frame,
+            text="Shell Inversa",
+            command=self.show_reverse_shell
+        ).pack(pady=5, fill=tk.X)
+        
+        ttk.Button(
+            attack_frame,
+            text="Ataque DDoS",
+            command=self.show_ddos
+        ).pack(pady=5, fill=tk.X)
+        
+        ttk.Button(
+            attack_frame,
+            text="Fuerza Bruta SSH",
+            command=self.show_brute_force
+        ).pack(pady=5, fill=tk.X)
+        
+        ttk.Button(
+            attack_frame,
+            text="Man in the Middle",
+            command=self.show_mitm
+        ).pack(pady=5, fill=tk.X)
+        
+        # Botones de monitorización
+        monitor_frame = tk.LabelFrame(button_frame, text="Monitorización", bg="#f0f0f0")
+        monitor_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
+        
+        ttk.Button(
+            monitor_frame,
+            text="Keylogger",
+            command=keylogger
+        ).pack(pady=5, fill=tk.X)
+        
+        # Configurar grid
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_rowconfigure(0, weight=1)
+        button_frame.grid_rowconfigure(1, weight=1)
+    
+    # Funciones para mostrar las ventanas de cada herramienta
+    def show_port_scanner(self):
+        self.show_input_window(
+            "Escaneo de Puertos",
+            ["IP Objetivo:", "Puerto Inicial:", "Puerto Final:"],
+            lambda ip, start, end: open_port_scanner(ip, start, end)
+        )
+    
+    def show_reverse_shell(self):
+        self.show_input_window(
+            "Shell Inversa",
+            ["IP Objetivo:"],
+            lambda ip: open_reverse_shell(ip)
+        )
+    
+    def show_ddos(self):
+        self.show_input_window(
+            "Ataque DDoS",
+            ["IP Objetivo:", "Puerto:", "Duración (segundos):"],
+            lambda ip, port, dur: open_ddos_attack(ip, port, dur)
+        )
+    
+    def show_brute_force(self):
+        window = tk.Toplevel(self.root)
+        window.title("Fuerza Bruta SSH")
+        
+        tk.Label(window, text="IP Objetivo:").grid(row=0, column=0, padx=5, pady=5)
+        ip_entry = tk.Entry(window)
+        ip_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        tk.Label(window, text="Usuario:").grid(row=1, column=0, padx=5, pady=5)
+        user_entry = tk.Entry(window)
+        user_entry.grid(row=1, column=1, padx=5, pady=5)
+        
+        tk.Label(window, text="Diccionario:").grid(row=2, column=0, padx=5, pady=5)
+        
+        file_frame = tk.Frame(window)
+        file_frame.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        
+        path_entry = tk.Entry(file_frame)
+        path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        tk.Button(
+            file_frame,
+            text="...",
+            command=lambda: self.browse_file(path_entry)
+        ).pack(side=tk.RIGHT)
+        
+        tk.Button(
+            window,
+            text="Iniciar Ataque",
+            command=lambda: open_brute_force(
+                ip_entry.get(),
+                user_entry.get(),
+                path_entry.get()
+            )
+        ).grid(row=3, column=0, columnspan=2, pady=10)
+    
+    def show_mitm(self):
+        window = tk.Toplevel(self.root)
+        window.title("MITM Attack")
+        
+        # Variables de control
+        self.mitm_thread = None
+        
+        # Interfaz
+        tk.Label(window, text="IP Víctima:").grid(row=0, column=0, padx=5, pady=5)
+        target_entry = tk.Entry(window)
+        target_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        tk.Label(window, text="IP Gateway:").grid(row=1, column=0, padx=5, pady=5)
+        gateway_entry = tk.Entry(window)
+        gateway_entry.grid(row=1, column=1, padx=5, pady=5)
+        
+        tk.Label(window, text="Interfaz:").grid(row=2, column=0, padx=5, pady=5)
+        iface_entry = tk.Entry(window)
+        iface_entry.insert(0, "eth0")
+        iface_entry.grid(row=2, column=1, padx=5, pady=5)
+        
+        # Botón de control
+        self.mitm_btn = ttk.Button(
+            window,
+            text="Iniciar MITM",
+            command=self.toggle_mitm
+        )
+        self.mitm_btn.grid(row=3, column=0, columnspan=2, pady=10)
+        
+        # Guardar referencias
+        self.mitm_target_entry = target_entry
+        self.mitm_gateway_entry = gateway_entry
+        self.mitm_iface_entry = iface_entry
+
+    def toggle_mitm(self):
+        """Alternar entre inicio y detención del MITM"""
+        if self.mitm_thread and self.mitm_thread.is_alive():
+            # Detener el ataque
+            self.mitm_thread.running = False
+            self.mitm_thread.join()
+            self.mitm_btn.config(text="Iniciar MITM")
+            messagebox.showinfo("MITM", "Ataque detenido")
+        else:
+            # Iniciar nuevo ataque
+            target = self.mitm_target_entry.get()
+            gateway = self.mitm_gateway_entry.get()
+            iface = self.mitm_iface_entry.get()
+            
+            if target and gateway:
+                self.mitm_thread = mitm_arp_spoof(target, gateway, iface)
+                if self.mitm_thread:
+                    self.mitm_btn.config(text="Detener MITM")
+        def stop_attack():
+            if self.mitm_active and self.mitm_thread:
+                self.mitm_active = False
+                # Aquí necesitarías una forma de detener el hilo MITM
+                btn.config(text="Iniciar MITM", bg="SystemButtonFace")
+        
+        btn = tk.Button(
+            window,
+            text="Iniciar MITM",
+            command=lambda: start_attack() if not self.mitm_active else stop_attack()
+        )
+        btn.grid(row=3, column=0, columnspan=2)
+    
+    def show_sniffer(self):
+        self.show_input_window(
+            "Sniffer de Paquetes",
+            ["Interfaz (ej. eth0):", "Tiempo (segundos):"],
+            lambda iface, timeout: open_sniffer(iface, timeout)
+        )
+    
+    # Funciones auxiliares
+    def show_input_window(self, title, fields, callback):
+        window = tk.Toplevel(self.root)
+        window.title(title)
+        
+        entries = []
+        for i, field in enumerate(fields):
+            tk.Label(window, text=field).grid(row=i, column=0, padx=5, pady=5)
+            entry = tk.Entry(window)
+            entry.grid(row=i, column=1, padx=5, pady=5)
+            entries.append(entry)
+        
+        tk.Button(
+            window,
+            text="Ejecutar",
+            command=lambda: self.execute_callback(callback, entries)
+        ).grid(row=len(fields), column=0, columnspan=2, pady=10)
+    
+    def execute_callback(self, callback, entries):
+        args = [entry.get() for entry in entries]
+        threading.Thread(target=callback, args=args, daemon=True).start()
+    
+    def browse_file(self, entry_widget):
+        filename = filedialog.askopenfilename()
+        if filename:
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, filename)
 
 def start_gui():
-    # Importar funciones necesarias
-    open_reverse_shell, open_port_scanner, open_network_scan, keylogger, mostrar_resultado_con_descarga = import_functions()
-    if open_reverse_shell is None:
-        print("No se pueden cargar las funciones necesarias. Saliendo...")
-        return
-    
-    # Configuración de la ventana principal
     root = tk.Tk()
-    root.title("NetSecTools - Pentesting")
-    root.geometry("500x600")  # Aumentamos el tamaño para acomodar los nuevos elementos
-    root.configure(bg="#1e1e1e")
-
-    # Estilos personalizados - con manejo especial para Windows
-    style = ttk.Style()
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
-        # En Windows, el tema 'clam' podría no estar disponible
-        print("Tema 'clam' no disponible, usando tema predeterminado.")
-        available_themes = style.theme_names()
-        if available_themes:
-            print(f"Temas disponibles: {', '.join(available_themes)}")
-            style.theme_use(available_themes[0])  # Usar el primer tema disponible
-    
-    # Configurar estilos (compatible con Windows)
-    style.configure("TButton", font=("Helvetica", 12), padding=10)
-    style.configure("Accent.TButton")
-    
-    # Intentar aplicar colores si es posible
-    try:
-        style.configure("TButton", background="#4CAF50", foreground="white")
-        style.map("TButton", background=[("active", "#45a049")])
-        style.configure("Accent.TButton", background="#FF5722", foreground="white")
-        style.map("Accent.TButton", background=[("active", "#E64A19")])
-    except Exception as e:
-        print(f"No se pudieron aplicar todos los estilos: {e}")
-        print("La aplicación continuará con estilos básicos.")
-
-    # Encabezado
-    header_label = tk.Label(root, text="NetSecTools", font=("Helvetica", 24, "bold"), bg="#1e1e1e", fg="#4CAF50")
-    header_label.pack(pady=20)
-
-    # Frame para los botones
-    button_frame = tk.Frame(root, bg="#1e1e1e")
-    button_frame.pack(pady=10)
-
-    # Frame para los campos de entrada de la shell inversa
-    reverse_shell_frame = tk.Frame(root, bg="#1e1e1e")
-    reverse_shell_frame.pack(pady=10)
-
-    # Función para mostrar los campos de entrada de la shell inversa
-    def show_reverse_shell_inputs():
-        # Limpiar el frame antes de agregar nuevos elementos
-        for widget in reverse_shell_frame.winfo_children():
-            widget.destroy()
-
-        # Campo de entrada para la IP
-        tk.Label(reverse_shell_frame, text="IP Víctima:", bg="#1e1e1e", fg="white").pack(pady=5)
-        ip_entry = tk.Entry(reverse_shell_frame, width=30)
-        ip_entry.pack(pady=5)
-
-        # Botón para iniciar la shell inversa
-        def start_reverse_shell():
-            ip = ip_entry.get()
-            if not ip:
-                messagebox.showerror("Error", "Por favor, ingresa una IP objetivo.")
-                return
-            open_reverse_shell(ip)
-
-        tk.Button(reverse_shell_frame, text="Iniciar Shell Inversa", command=start_reverse_shell, bg="#FF5722", fg="white").pack(pady=10)
-
-    # Función para mostrar los campos de entrada del escaneo de puertos
-    def show_port_scan_inputs():
-        # Limpiar el frame antes de agregar nuevos elementos
-        for widget in reverse_shell_frame.winfo_children():
-            widget.destroy()
-
-        # Campos de entrada
-        tk.Label(reverse_shell_frame, text="IP Víctima:", bg="#1e1e1e", fg="white").pack(pady=5)
-        ip_entry = tk.Entry(reverse_shell_frame, width=30)
-        ip_entry.pack(pady=5)
-
-        tk.Label(reverse_shell_frame, text="Puerto de Inicio:", bg="#1e1e1e", fg="white").pack(pady=5)
-        start_port_entry = tk.Entry(reverse_shell_frame, width=30)
-        start_port_entry.pack(pady=5)
-
-        tk.Label(reverse_shell_frame, text="Puerto de Fin:", bg="#1e1e1e", fg="white").pack(pady=5)
-        end_port_entry = tk.Entry(reverse_shell_frame, width=30)
-        end_port_entry.pack(pady=5)
-
-        # Botón de escanear
-        def start_scan():
-            ip = ip_entry.get()
-            start_port = start_port_entry.get()
-            end_port = end_port_entry.get()
-
-            # Validar los campos
-            if not ip or not start_port or not end_port:
-                messagebox.showerror("Error", "Por favor, completa todos los campos.")
-                return
-
-            try:
-                start_port = int(start_port)
-                end_port = int(end_port)
-            except ValueError:
-                messagebox.showerror("Error", "Los puertos deben ser números enteros.")
-                return
-
-            # Llamar a la función de escaneo de puertos
-            open_port_scanner(ip, start_port, end_port)
-
-        tk.Button(reverse_shell_frame, text="Escanear", command=start_scan, bg="#4CAF50", fg="white").pack(pady=10)
-
-    # Botones
-    buttons = [
-        ("Escaneo de Puertos", show_port_scan_inputs),
-        ("Sniffer de Red", lambda: messagebox.showinfo("Sniffer de Red", "Función no implementada.")),
-        ("Shell Inversa", show_reverse_shell_inputs),
-        ("Detección de Máquinas", open_network_scan),
-        ("Ataque DDoS", lambda: messagebox.showinfo("Ataque DDoS", "Función no implementada.")),
-        ("Fuerza Bruta", lambda: messagebox.showinfo("Fuerza Bruta", "Función no implementada.")),
-        ("Man in the Middle", lambda: messagebox.showinfo("Man in the Middle", "Función no implementada.")),
-        ("Keylogger", keylogger),
-    ]
-
-    # Organización de los botones en filas de 2
-    for i in range(0, len(buttons), 2):
-        row_frame = tk.Frame(button_frame, bg="#1e1e1e")
-        row_frame.pack(fill=tk.X, padx=20, pady=5)
-        for j in range(2):
-            if i + j < len(buttons):
-                text, command = buttons[i + j]
-                # En Windows, podríamos necesitar usar botones normales en lugar de ttk
-                if platform.system() == "Windows":
-                    btn = tk.Button(row_frame, text=text, command=command, 
-                                   bg="#4CAF50", fg="white", font=("Helvetica", 12),
-                                   padx=10, pady=10)
-                else:
-                    btn = ttk.Button(row_frame, text=text, command=command, style="TButton")
-                btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-
+    app = NetSecToolsGUI(root)
     root.mainloop()
