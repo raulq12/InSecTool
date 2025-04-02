@@ -1,67 +1,58 @@
 import os
 import sys
 import subprocess
+import platform
 from tkinter import messagebox
+
 def enforce_root():
-    """Fuerza la ejecución como superusuario"""
+    """Fuerza ejecución como superusuario"""
     if os.geteuid() != 0:
-        print("ERROR: Debes ejecutar como superusuario")
-        print("Ejemplo: sudo python3 main.py")
-        sys.exit(1)
-
-def check_root():
-    if os.geteuid() != 0:
-        print("Ejecuta como superusuario: sudo python3 main.py")
-        sys.exit(1)
-
+        if platform.system() != "Linux":
+            messagebox.showerror("Error", "Esta herramienta solo funciona en Linux")
+            sys.exit(1)
+            
+        print("\n[!] Se requieren privilegios de superusuario")
+        print("[*] Reiniciando con sudo...")
+        try:
+            subprocess.call(['sudo', sys.executable] + sys.argv)
+            sys.exit(0)
+        except Exception as e:
+            print(f"[!] Error: {e}")
+            sys.exit(1)
 
 def check_dependencies():
-    try:
-        __import__('nmap')
-        __import__('scapy')
-        __import__('keyboard')
-        __import__('netifaces')
-        __import__('paramiko')
-        return True
-    except ImportError:
-        return False
-
-def auto_install():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    installer = os.path.join(script_dir, 'install.sh')
+    """Verifica dependencias"""
+    required = ['nmap', 'scapy', 'keyboard', 'netifaces', 'paramiko']
+    missing = []
     
-    if os.path.exists(installer):
-        os.chmod(installer, 0o755)
-        subprocess.run(['sudo', installer], check=True)
-    else:
-        messagebox.showerror("Error", "Instalador automático no encontrado")
+    for module in required:
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(module)
+    
+    if missing:
+        print("\n[!] Faltan dependencias:")
+        for m in missing:
+            print(f"  - {m}")
+        print("\nInstala con: sudo apt install python3-{nmap,scapy,keyboard,netifaces,paramiko}")
+    
+    return not missing
+
+def main():
+    """Función principal"""
+    enforce_root()
+    
+    if not check_dependencies():
+        messagebox.showerror("Error", "Instala las dependencias faltantes")
         sys.exit(1)
-
-if not check_dependencies():
-    auto_install()
-
-if not check_dependencies():
-    messagebox.showerror("Error", "No se pudieron instalar todas las dependencias")
-    sys.exit(1)
-
-try:
-    from gui import start_gui
-    start_gui()
-except Exception as e:
-    messagebox.showerror("Error", f"Error al iniciar la aplicación: {str(e)}")
-
+    
+    try:
+        from gui import setup_gui
+        setup_gui()
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo iniciar: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    enforce_root()  # Verificación de root
-
-    # Verificar e instalar dependencias
-    if not check_dependencies():
-        auto_install()
-
-    # Iniciar aplicación
-    try:
-        from gui import start_gui
-        start_gui()
-    except Exception as e:
-        messagebox.showerror("Error", f"Error crítico: {str(e)}")
-        sys.exit(1)
+    main()

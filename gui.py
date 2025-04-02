@@ -1,270 +1,359 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from functions import (
-    open_port_scanner,
-    open_reverse_shell,
-    open_network_scan,
-    open_ddos_attack,
-    open_brute_force,
-    open_mitm_attack,
-    open_sniffer,
-    keylogger
-)
+from tkinter import ttk, messagebox
+from functions import *
+from utils import *
 import threading
-import os
 
-class NetSecToolsGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("NetSecTools")
-        self.root.geometry("700x600")
-        self.root.configure(bg="#f0f0f0")
-        
-        self.setup_ui()
-    
-    def setup_ui(self):
-        # Frame principal
-        main_frame = tk.Frame(self.root, bg="#f0f0f0")
-        main_frame.pack(pady=20, padx=20, fill=tk.BOTH, expand=True)
-        
-        # Título
-        title = tk.Label(
-            main_frame,
-            text="NetSecTools - Pentesting Toolkit",
-            font=("Helvetica", 16, "bold"),
-            bg="#f0f0f0"
-        )
-        title.pack(pady=10)
-        
-        # Frame de botones
-        button_frame = tk.Frame(main_frame, bg="#f0f0f0")
-        button_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Botones de escaneo
-        scan_frame = tk.LabelFrame(button_frame, text="Escaneo", bg="#f0f0f0")
-        scan_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
-        
-        ttk.Button(
-            scan_frame,
-            text="Escaneo de Puertos",
-            command=self.show_port_scanner
-        ).pack(pady=5, fill=tk.X)
-        
-        ttk.Button(
-            scan_frame,
-            text="Escaneo de Red",
-            command=open_network_scan
-        ).pack(pady=5, fill=tk.X)
-        
-        ttk.Button(
-            scan_frame,
-            text="Sniffer de Paquetes",
-            command=self.show_sniffer
-        ).pack(pady=5, fill=tk.X)
-        
-        # Botones de ataques
-        attack_frame = tk.LabelFrame(button_frame, text="Ataques", bg="#f0f0f0")
-        attack_frame.grid(row=0, column=1, padx=10, pady=5, sticky="nsew")
-        
-        ttk.Button(
-            attack_frame,
-            text="Shell Inversa",
-            command=self.show_reverse_shell
-        ).pack(pady=5, fill=tk.X)
-        
-        ttk.Button(
-            attack_frame,
-            text="Ataque DDoS",
-            command=self.show_ddos
-        ).pack(pady=5, fill=tk.X)
-        
-        ttk.Button(
-            attack_frame,
-            text="Fuerza Bruta SSH",
-            command=self.show_brute_force
-        ).pack(pady=5, fill=tk.X)
-        
-        ttk.Button(
-            attack_frame,
-            text="Man in the Middle",
-            command=self.show_mitm
-        ).pack(pady=5, fill=tk.X)
-        
-        # Botones de monitorización
-        monitor_frame = tk.LabelFrame(button_frame, text="Monitorización", bg="#f0f0f0")
-        monitor_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
-        
-        ttk.Button(
-            monitor_frame,
-            text="Keylogger",
-            command=keylogger
-        ).pack(pady=5, fill=tk.X)
-        
-        # Configurar grid
-        button_frame.grid_columnconfigure(0, weight=1)
-        button_frame.grid_columnconfigure(1, weight=1)
-        button_frame.grid_rowconfigure(0, weight=1)
-        button_frame.grid_rowconfigure(1, weight=1)
-    
-    # Funciones para mostrar las ventanas de cada herramienta
-    def show_port_scanner(self):
-        self.show_input_window(
-            "Escaneo de Puertos",
-            ["IP Objetivo:", "Puerto Inicial:", "Puerto Final:"],
-            lambda ip, start, end: open_port_scanner(ip, start, end)
-        )
-    
-    def show_reverse_shell(self):
-        self.show_input_window(
-            "Shell Inversa",
-            ["IP Objetivo:"],
-            lambda ip: open_reverse_shell(ip)
-        )
-    
-    def show_ddos(self):
-        self.show_input_window(
-            "Ataque DDoS",
-            ["IP Objetivo:", "Puerto:", "Duración (segundos):"],
-            lambda ip, port, dur: open_ddos_attack(ip, port, dur)
-        )
-    
-    def show_brute_force(self):
-        window = tk.Toplevel(self.root)
-        window.title("Fuerza Bruta SSH")
-        
-        tk.Label(window, text="IP Objetivo:").grid(row=0, column=0, padx=5, pady=5)
-        ip_entry = tk.Entry(window)
-        ip_entry.grid(row=0, column=1, padx=5, pady=5)
-        
-        tk.Label(window, text="Usuario:").grid(row=1, column=0, padx=5, pady=5)
-        user_entry = tk.Entry(window)
-        user_entry.grid(row=1, column=1, padx=5, pady=5)
-        
-        tk.Label(window, text="Diccionario:").grid(row=2, column=0, padx=5, pady=5)
-        
-        file_frame = tk.Frame(window)
-        file_frame.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-        
-        path_entry = tk.Entry(file_frame)
-        path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        tk.Button(
-            file_frame,
-            text="...",
-            command=lambda: self.browse_file(path_entry)
-        ).pack(side=tk.RIGHT)
-        
-        tk.Button(
-            window,
-            text="Iniciar Ataque",
-            command=lambda: open_brute_force(
-                ip_entry.get(),
-                user_entry.get(),
-                path_entry.get()
-            )
-        ).grid(row=3, column=0, columnspan=2, pady=10)
-    
-    def show_mitm(self):
-        window = tk.Toplevel(self.root)
-        window.title("MITM Attack")
-        
-        # Variables de control
-        self.mitm_thread = None
-        
-        # Interfaz
-        tk.Label(window, text="IP Víctima:").grid(row=0, column=0, padx=5, pady=5)
-        target_entry = tk.Entry(window)
-        target_entry.grid(row=0, column=1, padx=5, pady=5)
-        
-        tk.Label(window, text="IP Gateway:").grid(row=1, column=0, padx=5, pady=5)
-        gateway_entry = tk.Entry(window)
-        gateway_entry.grid(row=1, column=1, padx=5, pady=5)
-        
-        tk.Label(window, text="Interfaz:").grid(row=2, column=0, padx=5, pady=5)
-        iface_entry = tk.Entry(window)
-        iface_entry.insert(0, "eth0")
-        iface_entry.grid(row=2, column=1, padx=5, pady=5)
-        
-        # Botón de control
-        self.mitm_btn = ttk.Button(
-            window,
-            text="Iniciar MITM",
-            command=self.toggle_mitm
-        )
-        self.mitm_btn.grid(row=3, column=0, columnspan=2, pady=10)
-        
-        # Guardar referencias
-        self.mitm_target_entry = target_entry
-        self.mitm_gateway_entry = gateway_entry
-        self.mitm_iface_entry = iface_entry
+# Variables globales de estado
+sniffer_active = False
+mitm_active = False
+keylogger_active = False
+stop_mitm = None
+stop_keylogger = None
+root = None
+status_bar = None
+sniffer_output = None
 
-    def toggle_mitm(self):
-        """Alternar entre inicio y detención del MITM"""
-        if self.mitm_thread and self.mitm_thread.is_alive():
-            # Detener el ataque
-            self.mitm_thread.running = False
-            self.mitm_thread.join()
-            self.mitm_btn.config(text="Iniciar MITM")
-            messagebox.showinfo("MITM", "Ataque detenido")
-        else:
-            # Iniciar nuevo ataque
-            target = self.mitm_target_entry.get()
-            gateway = self.mitm_gateway_entry.get()
-            iface = self.mitm_iface_entry.get()
+# Widgets globales
+port_ip = port_start = port_end = net_range = None
+mitm_target = mitm_gateway = mitm_btn = None
+keylogger_file = keylogger_btn = None
+shell_ip = shell_port = None
+ddos_ip = ddos_port = ddos_duration = None
+brute_ip = brute_user = brute_wordlist = None
+sniffer_iface = sniffer_filter = sniffer_time = None
+
+def update_status(message):
+    """Actualiza la barra de estado"""
+    status_bar.config(text=message)
+    root.update_idletasks()
+
+def start_port_scan():
+    ip = port_ip.get()
+    start_port = port_start.get()
+    end_port = port_end.get()
+    
+    if not validar_ip(ip):
+        messagebox.showerror("Error", "IP inválida")
+        return
+        
+    if not validar_puerto(start_port) or not validar_puerto(end_port) or int(start_port) > int(end_port):
+        messagebox.showerror("Error", "Puertos inválidos")
+        return
+        
+    update_status(f"Escaneando puertos en {ip}...")
+    threading.Thread(
+        target=lambda: mostrar_resultado_con_descarga(
+            "Resultados Escaneo",
+            "Puertos abiertos:\n" + "\n".join(f"• {port}" for port in scan_ports(ip, f"{start_port}-{end_port}")),
+            f"scan_{ip}.txt"
+        ),
+        daemon=True
+    ).start()
+
+def start_network_scan():
+    ip_range = net_range.get() or None
+    update_status("Escaneando red...")
+    threading.Thread(
+        target=lambda: mostrar_resultado_con_descarga(
+            "Resultados Red",
+            "Dispositivos:\n\n" + "\n\n".join(
+                f"IP: {d['ip']}\nMAC: {d['mac']}\nHostname: {d['hostname']}"
+                for d in scan_network(ip_range)
+            ),
+            "network_scan.txt"
+        ),
+        daemon=True
+    ).start()
+
+def start_reverse_shell():
+    ip = shell_ip.get()
+    port = shell_port.get()
+    
+    if not validar_ip(ip):
+        messagebox.showerror("Error", "IP inválida")
+        return
+        
+    if not validar_puerto(port):
+        messagebox.showerror("Error", "Puerto inválido")
+        return
+        
+    update_status(f"Conectando a {ip}:{port}...")
+    threading.Thread(
+        target=lambda: reverse_shell(ip, int(port)),
+        daemon=True
+    ).start()
+
+def start_ddos():
+    target = ddos_ip.get()
+    port = ddos_port.get()
+    duration = ddos_duration.get()
+    
+    if not target:
+        messagebox.showerror("Error", "Ingrese un objetivo")
+        return
+        
+    if not validar_puerto(port):
+        messagebox.showerror("Error", "Puerto inválido")
+        return
+        
+    try:
+        duration = int(duration)
+        if duration <= 0:
+            raise ValueError
+    except ValueError:
+        messagebox.showerror("Error", "Duración debe ser un número positivo")
+        return
+        
+    update_status(f"Iniciando DDoS contra {target}:{port}")
+    threading.Thread(
+        target=lambda: messagebox.showinfo(
+            "DDoS",
+            ddos_attack(target, int(port), duration)
+        ),
+        daemon=True
+    ).start()
+
+def start_brute_force():
+    target = brute_ip.get()
+    user = brute_user.get()
+    wordlist = brute_wordlist.get()
+    
+    if not all([target, user, wordlist]):
+        messagebox.showerror("Error", "Complete todos los campos")
+        return
+        
+    if not os.path.isfile(wordlist):
+        messagebox.showerror("Error", "Archivo de diccionario no encontrado")
+        return
+        
+    update_status(f"Iniciando fuerza bruta contra {target}...")
+    threading.Thread(
+        target=lambda: mostrar_resultado_con_descarga(
+            "Fuerza Bruta",
+            f"Resultado para {user}@{target}:\n" + ssh_bruteforce(target, user, wordlist),
+            f"bruteforce_{target}.txt"
+        ),
+        daemon=True
+    ).start()
+
+def toggle_mitm():
+    global mitm_active, stop_mitm
+    
+    if not mitm_active:
+        target = mitm_target.get()
+        gateway = mitm_gateway.get()
+        
+        if not validar_ip(target) or not validar_ip(gateway):
+            messagebox.showerror("Error", "IPs inválidas")
+            return
             
-            if target and gateway:
-                self.mitm_thread = mitm_arp_spoof(target, gateway, iface)
-                if self.mitm_thread:
-                    self.mitm_btn.config(text="Detener MITM")
-        def stop_attack():
-            if self.mitm_active and self.mitm_thread:
-                self.mitm_active = False
-                # Aquí necesitarías una forma de detener el hilo MITM
-                btn.config(text="Iniciar MITM", bg="SystemButtonFace")
+        mitm_active = True
+        mitm_btn.config(text="Detener MITM")
+        update_status(f"Iniciando MITM entre {target} y {gateway}")
         
-        btn = tk.Button(
-            window,
-            text="Iniciar MITM",
-            command=lambda: start_attack() if not self.mitm_active else stop_attack()
-        )
-        btn.grid(row=3, column=0, columnspan=2)
-    
-    def show_sniffer(self):
-        self.show_input_window(
-            "Sniffer de Paquetes",
-            ["Interfaz (ej. eth0):", "Tiempo (segundos):"],
-            lambda iface, timeout: open_sniffer(iface, timeout)
-        )
-    
-    # Funciones auxiliares
-    def show_input_window(self, title, fields, callback):
-        window = tk.Toplevel(self.root)
-        window.title(title)
-        
-        entries = []
-        for i, field in enumerate(fields):
-            tk.Label(window, text=field).grid(row=i, column=0, padx=5, pady=5)
-            entry = tk.Entry(window)
-            entry.grid(row=i, column=1, padx=5, pady=5)
-            entries.append(entry)
-        
-        tk.Button(
-            window,
-            text="Ejecutar",
-            command=lambda: self.execute_callback(callback, entries)
-        ).grid(row=len(fields), column=0, columnspan=2, pady=10)
-    
-    def execute_callback(self, callback, entries):
-        args = [entry.get() for entry in entries]
-        threading.Thread(target=callback, args=args, daemon=True).start()
-    
-    def browse_file(self, entry_widget):
-        filename = filedialog.askopenfilename()
-        if filename:
-            entry_widget.delete(0, tk.END)
-            entry_widget.insert(0, filename)
+        stop_mitm = mitm_attack(target, gateway)
+    else:
+        mitm_active = False
+        mitm_btn.config(text="Iniciar MITM")
+        if stop_mitm:
+            stop_mitm.set()
+        update_status("MITM detenido")
 
-def start_gui():
+def toggle_sniffer():
+    global sniffer_active, sniffer_output
+    
+    if not sniffer_active:
+        iface = sniffer_iface.get()
+        pkt_filter = sniffer_filter.get()
+        timeout = sniffer_time.get()
+        
+        if not iface:
+            messagebox.showerror("Error", "Especifique una interfaz")
+            return
+            
+        try:
+            timeout = int(timeout)
+            if timeout <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "Tiempo debe ser un número positivo")
+            return
+            
+        sniffer_active = True
+        sniffer_btn.config(text="Detener Sniffer")
+        sniffer_output.delete('1.0', tk.END)
+        update_status(f"Sniffer iniciado en {iface}")
+        
+        threading.Thread(
+            target=lambda: [sniffer_output.insert(tk.END, f"{pkt.summary()}\n") for pkt in 
+                          packet_sniffer(iface, timeout, pkt_filter) or []],
+            daemon=True
+        ).start()
+    else:
+        sniffer_active = False
+        sniffer_btn.config(text="Iniciar Sniffer")
+        update_status("Sniffer detenido")
+
+def save_sniffer_results():
+    content = sniffer_output.get('1.0', tk.END)
+    if not content.strip():
+        messagebox.showerror("Error", "No hay datos para guardar")
+        return
+        
+    filename = filedialog.asksaveasfilename(
+        defaultextension=".txt",
+        filetypes=(("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")),
+        title="Guardar captura"
+    )
+    
+    if filename:
+        try:
+            with open(filename, 'w') as f:
+                f.write(content)
+            update_status(f"Captura guardada en {filename}")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar: {str(e)}")
+
+def toggle_keylogger():
+    global keylogger_active, stop_keylogger
+    
+    if not keylogger_active:
+        output_file = keylogger_file.get()
+        stop_key = keylogger_stop.get()
+        
+        if not output_file:
+            messagebox.showerror("Error", "Especifique archivo de salida")
+            return
+            
+        keylogger_active = True
+        keylogger_btn.config(text="Detener Keylogger")
+        update_status(f"Keylogger iniciado. Presione {stop_key} para detener.")
+        
+        threading.Thread(
+            target=lambda: mostrar_resultado_con_descarga(
+                "Keylogger",
+                keylogger(output_file, stop_key) or "No se capturaron datos",
+                output_file
+            ),
+            daemon=True
+        ).start()
+    else:
+        keylogger_active = False
+        keylogger_btn.config(text="Iniciar Keylogger")
+        update_status("Keylogger detenido")
+
+def select_wordlist():
+    filename = seleccionar_archivo("Seleccionar diccionario")
+    if filename:
+        brute_wordlist.delete(0, tk.END)
+        brute_wordlist.insert(0, filename)
+
+def setup_gui():
+    global root, status_bar, sniffer_output
+    global port_ip, port_start, port_end, net_range
+    global mitm_target, mitm_gateway, mitm_btn
+    global keylogger_file, keylogger_btn, keylogger_stop
+    global shell_ip, shell_port
+    global ddos_ip, ddos_port, ddos_duration
+    global brute_ip, brute_user, brute_wordlist
+    global sniffer_iface, sniffer_filter, sniffer_time, sniffer_btn
+
     root = tk.Tk()
-    app = NetSecToolsGUI(root)
+    root.title("NetSecTools - Professional Edition")
+    root.geometry("900x700")
+    
+    # Notebook (pestañas)
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill=tk.BOTH, expand=True)
+    
+    # Pestaña Escaneo
+    scan_tab = ttk.Frame(notebook)
+    notebook.add(scan_tab, text="Escaneo")
+    
+    # Frame Escaneo de Puertos
+    port_frame = ttk.LabelFrame(scan_tab, text="Escaneo de Puertos")
+    port_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    port_ip = crear_entrada_con_label(port_frame, "IP Objetivo:")
+    port_start = crear_entrada_con_label(port_frame, "Puerto Inicial:", "1")
+    port_end = crear_entrada_con_label(port_frame, "Puerto Final:", "1024")
+    crear_boton(port_frame, "Iniciar Escaneo", start_port_scan)
+    
+    # Frame Escaneo de Red
+    net_frame = ttk.LabelFrame(scan_tab, text="Escaneo de Red")
+    net_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    net_range = crear_entrada_con_label(net_frame, "Rango de red (opcional):")
+    crear_boton(net_frame, "Escanear Red", start_network_scan)
+    
+    # Pestaña Ataques
+    attack_tab = ttk.Frame(notebook)
+    notebook.add(attack_tab, text="Ataques")
+    
+    # Frame Reverse Shell
+    shell_frame = ttk.LabelFrame(attack_tab, text="Reverse Shell")
+    shell_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    shell_ip = crear_entrada_con_label(shell_frame, "IP Objetivo:")
+    shell_port = crear_entrada_con_label(shell_frame, "Puerto:", "4444")
+    crear_boton(shell_frame, "Conectar", start_reverse_shell)
+    
+    # Frame MITM
+    mitm_frame = ttk.LabelFrame(attack_tab, text="Man in the Middle")
+    mitm_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    mitm_target = crear_entrada_con_label(mitm_frame, "IP Víctima:")
+    mitm_gateway = crear_entrada_con_label(mitm_frame, "IP Gateway:")
+    mitm_btn = crear_boton(mitm_frame, "Iniciar MITM", toggle_mitm)
+    
+    # Frame DDoS
+    ddos_frame = ttk.LabelFrame(attack_tab, text="Ataque DDoS")
+    ddos_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    ddos_ip = crear_entrada_con_label(ddos_frame, "IP/Dominio Objetivo:")
+    ddos_port = crear_entrada_con_label(ddos_frame, "Puerto:", "80")
+    ddos_duration = crear_entrada_con_label(ddos_frame, "Duración (seg):", "30")
+    crear_boton(ddos_frame, "Iniciar DDoS", start_ddos)
+    
+    # Frame Fuerza Bruta SSH
+    brute_frame = ttk.LabelFrame(attack_tab, text="Fuerza Bruta SSH")
+    brute_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    brute_ip = crear_entrada_con_label(brute_frame, "IP Objetivo:")
+    brute_user = crear_entrada_con_label(brute_frame, "Usuario:")
+    brute_wordlist = crear_entrada_con_label(brute_frame, "Diccionario:")
+    crear_boton(brute_frame, "Seleccionar Archivo", select_wordlist, colspan=1, pady=2)
+    crear_boton(brute_frame, "Iniciar Fuerza Bruta", start_brute_force, colspan=1, pady=2)
+    
+    # Pestaña Monitorización
+    monitor_tab = ttk.Frame(notebook)
+    notebook.add(monitor_tab, text="Monitorización")
+    
+    # Frame Sniffer
+    sniffer_frame = ttk.LabelFrame(monitor_tab, text="Sniffer de Paquetes")
+    sniffer_frame.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
+    
+    sniffer_iface = crear_entrada_con_label(sniffer_frame, "Interfaz:", "enp4s0")
+    sniffer_filter = crear_entrada_con_label(sniffer_frame, "Filtro:", "tcp")
+    sniffer_time = crear_entrada_con_label(sniffer_frame, "Tiempo (seg):", "30")
+    sniffer_btn = crear_boton(sniffer_frame, "Iniciar Sniffer", toggle_sniffer, colspan=1, pady=2)
+    crear_boton(sniffer_frame, "Guardar Captura", save_sniffer_results, colspan=1, pady=2)
+    sniffer_output = crear_area_texto(sniffer_frame)
+    
+    # Frame Keylogger
+    keylogger_frame = ttk.LabelFrame(monitor_tab, text="Keylogger")
+    keylogger_frame.pack(pady=5, padx=5, fill=tk.X)
+    
+    keylogger_file = crear_entrada_con_label(keylogger_frame, "Archivo de salida:", "keylog.txt")
+    keylogger_stop = crear_entrada_con_label(keylogger_frame, "Tecla de parada:", "f12")
+    keylogger_btn = crear_boton(keylogger_frame, "Iniciar Keylogger", toggle_keylogger)
+    
+    # Barra de estado
+    status_bar = tk.Label(root, text="Listo", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+    status_bar.pack(fill=tk.X, pady=(10, 0))
+    
     root.mainloop()
+
+if __name__ == "__main__":
+    setup_gui()
