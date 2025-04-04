@@ -1,8 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from functions import *
 from utils import *
 import threading
+import queue
+import time
 
 # Variables globales de estado
 sniffer_active = False
@@ -13,15 +15,16 @@ stop_keylogger = None
 root = None
 status_bar = None
 sniffer_output = None
+packets_queue = queue.Queue()
 
 # Widgets globales
 port_ip = port_start = port_end = net_range = None
 mitm_target = mitm_gateway = mitm_btn = None
-keylogger_file = keylogger_btn = None
+keylogger_file = keylogger_btn = keylogger_stop = None
 shell_ip = shell_port = None
 ddos_ip = ddos_port = ddos_duration = None
 brute_ip = brute_user = brute_wordlist = None
-sniffer_iface = sniffer_filter = sniffer_time = None
+sniffer_iface = sniffer_filter = sniffer_time = sniffer_btn = None
 
 def update_status(message):
     """Actualiza la barra de estado"""
@@ -161,37 +164,51 @@ def toggle_mitm():
         update_status("MITM detenido")
 
 def toggle_sniffer():
-    global sniffer_active, sniffer_output
+    global sniffer_active, sniffer_thread, sniffer_stop_event, packets_queue
     
     if not sniffer_active:
-        iface = sniffer_iface.get()
-        pkt_filter = sniffer_filter.get()
-        timeout = sniffer_time.get()
-        
+        iface = sniffer_iface.get().strip()
         if not iface:
-            messagebox.showerror("Error", "Especifique una interfaz")
-            return
-            
-        try:
-            timeout = int(timeout)
-            if timeout <= 0:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Error", "Tiempo debe ser un número positivo")
+            messagebox.showerror("Error", "Debe especificar una interfaz válida")
             return
             
         sniffer_active = True
+        sniffer_stop_event = threading.Event()
         sniffer_btn.config(text="Detener Sniffer")
         sniffer_output.delete('1.0', tk.END)
         update_status(f"Sniffer iniciado en {iface}")
         
-        threading.Thread(
-            target=lambda: [sniffer_output.insert(tk.END, f"{pkt.summary()}\n") for pkt in 
-                          packet_sniffer(iface, timeout, pkt_filter) or []],
-            daemon=True
-        ).start()
+        # Limpiar la cola de paquetes
+        with packets_queue.mutex:
+            packets_queue.queue.clear()
+        
+        def capture_thread():
+            try:
+                packets = packet_sniffer(iface, sniffer_filter.get(), sniffer_stop_event)
+                for pkt in packets:
+                    packets_queue.put(pkt)
+            finally:
+                sniffer_stop_event.set()
+                root.after(100, lambda: toggle_sniffer())
+        
+        def update_gui():
+            if not sniffer_stop_event.is_set():
+                try:
+                    while not packets_queue.empty():
+                        pkt = packets_queue.get_nowait()
+                        sniffer_output.insert(tk.END, f"{pkt}\n")
+                        sniffer_output.see(tk.END)
+                except queue.Empty:
+                    pass
+                root.after(100, update_gui)
+        
+        sniffer_thread = threading.Thread(target=capture_thread, daemon=True)
+        sniffer_thread.start()
+        update_gui()
     else:
         sniffer_active = False
+        if sniffer_stop_event:
+            sniffer_stop_event.set()
         sniffer_btn.config(text="Iniciar Sniffer")
         update_status("Sniffer detenido")
 
@@ -220,28 +237,34 @@ def toggle_keylogger():
     
     if not keylogger_active:
         output_file = keylogger_file.get()
-        stop_key = keylogger_stop.get()
+        stop_key = keylogger_stop.get().lower()
         
         if not output_file:
             messagebox.showerror("Error", "Especifique archivo de salida")
             return
             
         keylogger_active = True
-        keylogger_btn.config(text="Detener Keylogger")
+        keylogger_btn.config(text=f"Presione {stop_key.upper()} para detener", state=tk.DISABLED)
         update_status(f"Keylogger iniciado. Presione {stop_key} para detener.")
         
-        threading.Thread(
-            target=lambda: mostrar_resultado_con_descarga(
-                "Keylogger",
-                keylogger(output_file, stop_key) or "No se capturaron datos",
-                output_file
-            ),
-            daemon=True
-        ).start()
+        def keylogger_thread():
+            result = keylogger(output_file, stop_key) or "No se capturaron datos"
+            root.after(0, lambda: [
+                mostrar_resultado_con_descarga("Keylogger", result, output_file),
+                restore_keylogger_button()
+            ])
+        
+        threading.Thread(target=keylogger_thread, daemon=True).start()
     else:
-        keylogger_active = False
-        keylogger_btn.config(text="Iniciar Keylogger")
-        update_status("Keylogger detenido")
+        if stop_keylogger:
+            stop_keylogger.set()
+        restore_keylogger_button()
+
+def restore_keylogger_button():
+    global keylogger_active
+    keylogger_active = False
+    keylogger_btn.config(text="Iniciar Keylogger", state=tk.NORMAL)
+    update_status("Keylogger detenido")
 
 def select_wordlist():
     filename = seleccionar_archivo("Seleccionar diccionario")
@@ -336,7 +359,6 @@ def setup_gui():
     
     sniffer_iface = crear_entrada_con_label(sniffer_frame, "Interfaz:", "enp4s0")
     sniffer_filter = crear_entrada_con_label(sniffer_frame, "Filtro:", "tcp")
-    sniffer_time = crear_entrada_con_label(sniffer_frame, "Tiempo (seg):", "30")
     sniffer_btn = crear_boton(sniffer_frame, "Iniciar Sniffer", toggle_sniffer, colspan=1, pady=2)
     crear_boton(sniffer_frame, "Guardar Captura", save_sniffer_results, colspan=1, pady=2)
     sniffer_output = crear_area_texto(sniffer_frame)
