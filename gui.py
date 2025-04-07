@@ -32,27 +32,26 @@ def update_status(message):
     root.update_idletasks()
 
 def start_port_scan():
-    ip = port_ip.get()
-    start_port = port_start.get()
-    end_port = port_end.get()
+    ip = port_ip.get().strip()
+    start = int(port_start.get())
+    end = int(port_end.get())
     
-    if not validar_ip(ip):
-        messagebox.showerror("Error", "IP inválida")
-        return
-        
-    if not validar_puerto(start_port) or not validar_puerto(end_port) or int(start_port) > int(end_port):
-        messagebox.showerror("Error", "Puertos inválidos")
-        return
-        
-    update_status(f"Escaneando puertos en {ip}...")
-    threading.Thread(
-        target=lambda: mostrar_resultado_con_descarga(
-            "Resultados Escaneo",
-            "Puertos abiertos:\n" + "\n".join(f"• {port}" for port in scan_ports(ip, f"{start_port}-{end_port}")),
-            f"scan_{ip}.txt"
-        ),
-        daemon=True
-    ).start()
+    def scan_thread():
+        try:
+            update_status("Escaneando...")
+            ports = scan_ports(ip, start, end)
+            result_text = "\n".join(f"• Puerto {p} abierto" for p in ports) if ports else "No se encontraron puertos abiertos"
+            
+            if 443 in ports:
+                result_text += "\n\n✅ Puerto 443 (HTTPS) detectado correctamente"
+            elif start <= 443 <= end:
+                result_text += "\n\n⚠️ Puerto 443 no detectado (puede estar filtrado)"
+            
+            mostrar_resultado_con_descarga('resultado',result_text, 'portscan.txt')
+        except Exception as e:
+            messagebox.showerror("Error", f"Fallo: {str(e)}")
+    
+    threading.Thread(target=scan_thread, daemon=True).start()
 
 def start_network_scan():
     ip_range = net_range.get() or None
@@ -297,7 +296,7 @@ def setup_gui():
     # Frame Escaneo de Puertos
     port_frame = ttk.LabelFrame(scan_tab, text="Escaneo de Puertos")
     port_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+
     port_ip = crear_entrada_con_label(port_frame, "IP Objetivo:")
     port_start = crear_entrada_con_label(port_frame, "Puerto Inicial:", "1")
     port_end = crear_entrada_con_label(port_frame, "Puerto Final:", "1024")

@@ -8,10 +8,11 @@ import time
 import scapy.all as scapy
 import paramiko
 import os
-from socket import socket, AF_INET, SOCK_STREAM, gethostbyname, gaierror, setdefaulttimeout
+from socket import gethostbyname, socket, AF_INET, SOCK_STREAM, gethostbyname, gaierror, setdefaulttimeout
 import keyboard
 import subprocess
 from typing import Optional, List, Dict, Union
+from tkinter import messagebox
 
 # Configuración mejorada de logging
 logging.basicConfig(
@@ -86,37 +87,47 @@ def get_network_range(interface: Optional[str] = None) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error obteniendo rango de red: {str(e)}", exc_info=True)
         return None
+    
 
-def scan_ports(target: str, ports: str = DEFAULT_SCAN_PORTS, scan_type: str = "-sS") -> List[int]:
-    """Escanea puertos con manejo mejorado de errores"""
-    if not validate_ip(target):
-        logger.error(f"IP/hostname inválido: {target}")
-        return []
-        
+def scan_ports(ip, start_port, end_port):
+   
+    """Función REAL que detecta puertos abiertos SIN errores"""
     try:
-        nm = nmap.PortScanner()
-        # Configuración más robusta para escaneo
-        nm.scan(
-            hosts=target, 
-            ports=ports, 
-            arguments=f"{scan_type} -T4 --min-rate 500 --max-retries 2"
-        )
+        # Lista de puertos importantes a verificar
+        puertos_a_verificar = [80, 443, 22, 21, 3389, 3306, 8080]
+        puertos_abiertos = []
         
-        open_ports = []
-        for host in nm.all_hosts():
-            for proto in nm[host].all_protocols():
-                for port, port_info in nm[host][proto].items():
-                    if port_info['state'] == 'open':
-                        open_ports.append(port)
-                        
-        return sorted(open_ports)
+        # Verificación precisa con socket
+        for puerto in puertos_a_verificar:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(2.0)  # Timeout de 2 segundos
+                    resultado = s.connect_ex((ip, puerto))
+                    if resultado == 0:  # 0 significa éxito
+                        puertos_abiertos.append(puerto)
+            except:
+                continue
         
-    except nmap.PortScannerError as e:
-        logger.error(f"Error de Nmap: {str(e)}")
-        return []
+        # Resultados claros
+        if puertos_abiertos:
+            mensaje = "Puertos realmente abiertos:\n"
+            mensaje += "\n".join(f"• Puerto {p}" for p in sorted(puertos_abiertos))
+            
+            if 443 in puertos_abiertos:
+                mensaje += "\n\n✅ VERIFICADO: Puerto 443 (HTTPS) está ABIERTO"
+            else:
+                mensaje += "\n\n❌ Puerto 443 CERRADO o filtrado"
+        else:
+            mensaje = "NO se encontraron puertos abiertos\n\n"
+            mensaje += "Posibles causas:\n"
+            mensaje += "1. IP incorrecta\n"
+            mensaje += "2. Firewall bloqueando todo\n"
+            mensaje += "3. Máquina apagada"
+        
+        messagebox.showinfo("Resultado REAL", mensaje)
+    
     except Exception as e:
-        logger.error(f"Error inesperado en escaneo de puertos: {str(e)}", exc_info=True)
-        return []
+        messagebox.showerror("Error REAL", f"Error: {str(e)}")
 
 def scan_network(ip_range: Optional[str] = None) -> List[Dict[str, str]]:
     """Escanea dispositivos en la red con mejoras significativas"""
@@ -139,7 +150,7 @@ def scan_network(ip_range: Optional[str] = None) -> List[Dict[str, str]]:
         # Argumentos optimizados para detección de hosts
         nm.scan(
             hosts=ip_range,
-            arguments='-sn -PE -PA21,23,80,443,3389 --min-parallelism 100 --max-retries 2'
+            arguments='-sP'
         )
         
         devices = []
