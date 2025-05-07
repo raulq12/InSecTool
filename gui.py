@@ -161,7 +161,7 @@ def toggle_mitm():
         if stop_mitm:
             stop_mitm.set()
         update_status("MITM detenido")
-        
+
 def toggle_sniffer():
     global sniffer_active, sniffer_thread, sniffer_stop_event
 
@@ -312,7 +312,7 @@ def setup_gui():
     shell_frame.pack(pady=5, padx=5, fill=tk.X)
     
     shell_ip = crear_entrada_con_label(shell_frame, "IP Objetivo:")
-    shell_port = crear_entrada_con_label(shell_frame, "Puerto:", "4444")
+    shell_port = crear_entrada_con_label(shell_frame, "Puerto:", "5000")
     crear_boton(shell_frame, "Conectar", start_reverse_shell)
     
     # Frame MITM
