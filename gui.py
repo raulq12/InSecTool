@@ -277,7 +277,7 @@ def setup_gui():
 
     root = tk.Tk()
     root.title("NetSecTools - Professional Edition")
-    root.geometry("900x700")
+    root.geometry("800x600")
     
     # Notebook (pestañas)
     notebook = ttk.Notebook(root)
