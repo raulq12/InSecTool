@@ -422,29 +422,91 @@ def mitm_attack(target_ip: str, gateway_ip: str, interface: Optional[str] = None
         logger.error(f"Error en MITM: {str(e)}", exc_info=True)
         return None
 
-def packet_sniffer(interface: str, packet_filter: str, stop_event: threading.Event) -> List[str]:
-    """Captura paquetes de red hasta que se active stop_event"""
-    packets = []
-    
-    def process_packet(packet):
-        packets.append(packet.summary())
-        if stop_event.is_set():
-            raise KeyboardInterrupt("Stopped by user")
-            
-    try:
-        scapy.conf.iface = interface
-        scapy.conf.sniff_promisc = True
-        scapy.sniff(
-            filter=packet_filter,
-            prn=process_packet,
-            store=False,
-            stop_filter=lambda _: stop_event.is_set(),
-            timeout=1
-        )
-        return packets
-    except Exception as e:
-        logger.error(f"Packet sniffing error: {str(e)}")
-        return []
+import threading
+from typing import List
+from scapy.all import sniff, Raw
+from scapy.layers.http import HTTPRequest
+from scapy.layers.inet import IP, TCP, UDP, ICMP
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+class PacketSniffer:
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+
+    def packet_sniffer(self, interface: str, packet_filter: str, stop_event: threading.Event, packet_callback=None):
+        """Captura paquetes y llama a packet_callback con cada resumen."""
+        import scapy.all as scapy
+        from scapy.layers.http import HTTPRequest
+        from scapy.layers.inet import IP, TCP, UDP, ICMP
+        from scapy.packet import Raw
+        from datetime import datetime
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        def process_packet(packet):
+            try:
+                summary = self._analyze_packet(packet)
+                if packet_callback:
+                    packet_callback(summary)  # Aquí se envía a la GUI
+                if stop_event.is_set():
+                    raise KeyboardInterrupt
+            except Exception as e:
+                logger.error(f"Error processing packet: {str(e)}")
+
+        try:
+            scapy.conf.iface = interface
+            scapy.conf.sniff_promisc = True
+            scapy.sniff(
+                filter=packet_filter,
+                prn=process_packet,
+                store=False,
+                stop_filter=lambda x: stop_event.is_set()
+            )
+        except KeyboardInterrupt:
+            logger.info("Sniffer stopped by user")
+        except Exception as e:
+            logger.error(f"Sniffing error: {str(e)}")
+
+    def _analyze_packet(self, pkt):
+        proto = ""
+        summary = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+
+        if IP in pkt:
+            ip_layer = pkt[IP]
+            summary += f"{ip_layer.src} -> {ip_layer.dst} | "
+
+            if TCP in pkt:
+                tcp = pkt[TCP]
+                proto = "TCP"
+                flags = tcp.sprintf("%TCP.flags%")
+                summary += f"TCP {tcp.sport}->{tcp.dport} Flags:{flags}"
+                if Raw in pkt:
+                    raw_data = bytes(pkt[Raw]).decode(errors="replace").strip()
+                    if raw_data:
+                        summary += f" Data:{raw_data}"
+            elif UDP in pkt:
+                udp = pkt[UDP]
+                proto = "UDP"
+                summary += f"UDP {udp.sport}->{udp.dport}"
+                if Raw in pkt:
+                    raw_data = bytes(pkt[Raw]).decode(errors="replace").strip()
+                    if raw_data:
+                        summary += f" Data:{raw_data}"
+            elif ICMP in pkt:
+                proto = "ICMP"
+                summary += f"ICMP Type:{pkt[ICMP].type} Code:{pkt[ICMP].code}"
+            else:
+                proto = "Other"
+                summary += f"Protocol: {ip_layer.proto}"
+        else:
+            summary += "Non-IP Packet"
+
+        return summary
+
+
 
 def keylogger(output_file: str = "keylog.txt", stop_key: str = 'f12') -> Optional[str]:
     """Keylogger mejorado con más controles"""

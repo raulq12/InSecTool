@@ -161,49 +161,43 @@ def toggle_mitm():
         if stop_mitm:
             stop_mitm.set()
         update_status("MITM detenido")
-
+        
 def toggle_sniffer():
-    global sniffer_active, sniffer_thread, sniffer_stop_event, packets_queue
-    
+    global sniffer_active, sniffer_thread, sniffer_stop_event
+
     if not sniffer_active:
         iface = sniffer_iface.get().strip()
         if not iface:
             messagebox.showerror("Error", "Debe especificar una interfaz válida")
             return
-            
+
         sniffer_active = True
         sniffer_stop_event = threading.Event()
         sniffer_btn.config(text="Detener Sniffer")
         sniffer_output.delete('1.0', tk.END)
         update_status(f"Sniffer iniciado en {iface}")
-        
-        # Limpiar la cola de paquetes
-        with packets_queue.mutex:
-            packets_queue.queue.clear()
-        
+
+        def packet_callback(summary):
+            sniffer_output.after(0, lambda: (
+                sniffer_output.insert(tk.END, summary + "\n"),
+                sniffer_output.see(tk.END)
+            ))
+
         def capture_thread():
             try:
-                packets = packet_sniffer(iface, sniffer_filter.get(), sniffer_stop_event)
-                for pkt in packets:
-                    packets_queue.put(pkt)
+                sniffer = PacketSniffer()
+                sniffer.packet_sniffer(
+                    iface,
+                    sniffer_filter.get(),
+                    sniffer_stop_event,
+                    packet_callback=packet_callback
+                )
             finally:
                 sniffer_stop_event.set()
-                root.after(100, lambda: toggle_sniffer())
-        
-        def update_gui():
-            if not sniffer_stop_event.is_set():
-                try:
-                    while not packets_queue.empty():
-                        pkt = packets_queue.get_nowait()
-                        sniffer_output.insert(tk.END, f"{pkt}\n")
-                        sniffer_output.see(tk.END)
-                except queue.Empty:
-                    pass
-                root.after(100, update_gui)
-        
+                sniffer_output.after(0, lambda: toggle_sniffer())
+
         sniffer_thread = threading.Thread(target=capture_thread, daemon=True)
         sniffer_thread.start()
-        update_gui()
     else:
         sniffer_active = False
         if sniffer_stop_event:
