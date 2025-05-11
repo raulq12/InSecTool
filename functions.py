@@ -14,6 +14,17 @@ import subprocess
 from typing import Optional, List, Dict, Union, Tuple
 from tkinter import messagebox
 
+import nmap
+from typing import Tuple, List, Dict
+
+import threading
+from typing import List
+from scapy.all import sniff, Raw
+from scapy.layers.http import HTTPRequest
+from scapy.layers.inet import IP, TCP, UDP, ICMP
+from datetime import datetime
+import logging
+
 # Configuración mejorada de logging
 logging.basicConfig(
     level=logging.INFO,
@@ -28,8 +39,6 @@ logger = logging.getLogger(__name__)
 # Constantes
 MAX_THREADS = 10
 DEFAULT_TIMEOUT = 5
-SNIFFER_PACKET_LIMIT = 200
-DEFAULT_SCAN_PORTS = "21-23,80,443,3389"  # Puertos comúnmente utilizados
 
 def validate_ip(ip: str) -> bool:
     """Valida una dirección IP de forma más robusta"""
@@ -88,8 +97,6 @@ def get_network_range(interface: Optional[str] = None) -> Optional[str]:
         logger.error(f"Error obteniendo rango de red: {str(e)}", exc_info=True)
         return None
 
-import nmap
-from typing import Tuple, List, Dict
 
 def scan_ports(target_ip: str, start_port: int, end_port: int) -> Tuple[bool, str, List[Dict]]:
     """
@@ -438,13 +445,6 @@ def mitm_attack(target_ip: str, gateway_ip: str, interface: Optional[str] = None
         logger.error(f"Error en MITM: {str(e)}", exc_info=True)
         return None
 
-import threading
-from typing import List
-from scapy.all import sniff, Raw
-from scapy.layers.http import HTTPRequest
-from scapy.layers.inet import IP, TCP, UDP, ICMP
-from datetime import datetime
-import logging
 
 logger = logging.getLogger(__name__)
 class PacketSniffer:

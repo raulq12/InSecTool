@@ -42,11 +42,6 @@ def start_port_scan():
             ports = scan_ports(ip, start, end)
             result_text = "\n".join(f"• Puerto {p} abierto" for p in ports) if ports else "No se encontraron puertos abiertos"
             
-            if 443 in ports:
-                result_text += "\n\n✅ Puerto 443 (HTTPS) detectado correctamente"
-            elif start <= 443 <= end:
-                result_text += "\n\n⚠️ Puerto 443 no detectado (puede estar filtrado)"
-            
             mostrar_resultado_con_descarga('resultado',result_text, 'portscan.txt')
         except Exception as e:
             messagebox.showerror("Error", f"Fallo: {str(e)}")
