@@ -87,45 +87,64 @@ def get_network_range(interface: Optional[str] = None) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error obteniendo rango de red: {str(e)}", exc_info=True)
         return None
-    
-def scan_ports(target_ip: str, start_port: int, end_port: int) -> None:
-    """
-    Escanea puertos TCP en un rango determinado de una IP dada utilizando Nmap.
 
-    Parámetros:
-        target_ip (str): Dirección IP a escanear.
-        start_port (int): Puerto inicial del rango.
-        end_port (int): Puerto final del rango.
+import nmap
+from typing import Tuple, List, Dict
+
+def scan_ports(target_ip: str, start_port: int, end_port: int) -> Tuple[bool, str, List[Dict]]:
+    """
+    Escanea puertos en un rango específico y devuelve los resultados
+    
+    Args:
+        target_ip: Dirección IP a escanear
+        start_port: Puerto inicial del rango
+        end_port: Puerto final del rango
+    
+    Returns:
+        Tuple: (success, message, results)
+        - success: Booleano que indica si el escaneo fue exitoso
+        - message: Mensaje descriptivo del resultado
+        - results: Lista de diccionarios con puertos abiertos
+          [{'port': int, 'service': str, 'state': str}]
     """
     nm = nmap.PortScanner()
-
-    # Escanear el rango de puertos
+    open_ports = []
+    
     try:
-        nm.scan(hosts=target_ip, arguments=f"-p {start_port}-{end_port}")
+        # Validación básica de entrada
+        if not target_ip or start_port < 1 or end_port > 65535 or start_port > end_port:
+            return False, "Rango de puertos inválido", []
         
-        # Verificar si el host está activo
-        if nm.all_hosts():
-            host = nm.all_hosts()[0]
-            mensaje = f"Escaneo de puertos para {host}:\n"
-            
-            if 'hostnames' in nm[host] and nm[host]['hostnames']:
-                mensaje += f"Nombre del host: {nm[host]['hostnames']}\n"
-            
-            if 'tcp' in nm[host]:
-                for port in range(start_port, end_port + 1):
-                    port_status = "cerrado"
-                    if port in nm[host]['tcp']:
-                        port_status = nm[host]['tcp'][port]['state']
-                    mensaje += f"Puerto {port}: {port_status}\n"
-            else:
-                mensaje += "No se detectaron puertos abiertos en el rango especificado."
-            
-            messagebox.showinfo("Resultado Escaneo de Puertos", mensaje)
+        port_range = f"{start_port}-{end_port}"
+        
+        # Escaneo TCP Connect (no requiere privilegios root)
+        nm.scan(hosts=target_ip, ports=port_range, arguments='-sT --open')
+        
+        if target_ip not in nm.all_hosts():
+            return False, f"El host {target_ip} no respondió", []
+        
+        # Procesar resultados
+        for proto in nm[target_ip].all_protocols():
+            for port, info in nm[target_ip][proto].items():
+                if info['state'] == 'open':
+                    open_ports.append({
+                        'port': port,
+                        'service': info.get('name', 'desconocido'),
+                        'state': info['state']
+                    })
+        
+        if open_ports:
+            message = f"Escaneo completado. {len(open_ports)} puertos abiertos encontrados."
+            return True, message, sorted(open_ports, key=lambda x: x['port'])
         else:
-            messagebox.showinfo("Resultado Escaneo de Puertos", "No se pudo detectar el host.")
+            return True, "No se encontraron puertos abiertos en el rango especificado", []
+            
+    except nmap.PortScannerError as e:
+        return False, f"Error de Nmap: {str(e)}", []
     except Exception as e:
-        messagebox.showinfo("Error", f"Ocurrió un error: {str(e)}")
-        
+        return False, f"Error inesperado: {str(e)}", []
+
+
 def scan_network(ip_range: Optional[str] = None) -> List[Dict[str, str]]:
     """Escanea dispositivos en la red con mejoras significativas"""
     try:
