@@ -1,29 +1,32 @@
+# Módulos estándar
+import os
+import time
+import socket
+import subprocess
+import logging
+import threading
+from datetime import datetime
+from typing import Optional, List, Dict, Union, Tuple
+
+# Redes y escaneo
 import nmap
 import netifaces
 import ipaddress
-import logging
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import time
+
+# Librerías de ataque y análisis
 import scapy.all as scapy
-import paramiko
-import os
-import socket
-import keyboard
-import subprocess
-from typing import Optional, List, Dict, Union, Tuple
-from tkinter import messagebox
-
-import nmap
-from typing import Tuple, List, Dict
-
-import threading
-from typing import List
 from scapy.all import sniff, Raw
 from scapy.layers.http import HTTPRequest
 from scapy.layers.inet import IP, TCP, UDP, ICMP
-from datetime import datetime
-import logging
+
+# SSH y automatización
+import paramiko
+
+# Entrada de teclado
+import keyboard
+
+# Interfaz gráfica
+from tkinter import messagebox
 
 # Configuración mejorada de logging
 logging.basicConfig(
