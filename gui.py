@@ -141,7 +141,6 @@ def start_brute_force():
         daemon=True
     ).start()
 
-
 def toggle_mitm():
     global mitm_active, stop_mitm
 
