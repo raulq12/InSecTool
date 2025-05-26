@@ -198,7 +198,6 @@ def toggle_sniffer():
                 )
             finally:
                 sniffer_stop_event.set()
-                sniffer_output.after(0, lambda: toggle_sniffer())
 
         sniffer_thread = threading.Thread(target=capture_thread, daemon=True)
         sniffer_thread.start()
@@ -279,101 +278,109 @@ def setup_gui():
     global brute_ip, brute_user, brute_wordlist, brute_port
     global sniffer_iface, sniffer_filter, sniffer_time, sniffer_btn
 
+
+
+
     root = tk.Tk()
-    root.title("NetSecTools - Professional Edition")
-    root.geometry("800x600")
-    
-    # Notebook (pestañas)
+    root.title("InSecTool - Professional Edition")
+
+    # Tamaño fijo y ventana centrada
+    root.geometry("740x880")
+    root.resizable(False, False)
+    root.eval('tk::PlaceWindow . center')
+
+    # (Opcional: aplica tema)
+    style = ttk.Style()
+    style.theme_use('clam')
+
+    # ... aquí sigue el resto del contenido de tu GUI ...
+
+    style.configure("TFrame", background="#1e1e2f")
+    style.configure("TLabel", background="#1e1e2f", foreground="#dcdcdc")
+    style.configure("TButton", background="#3e3e5f", foreground="white", padding=6)
+    style.map("TButton", background=[("active", "#5e5eaf")])
+    style.configure("TLabelframe", background="#2b2b3d", foreground="#b0aee0")
+    style.configure("TLabelframe.Label", background="#2b2b3d", foreground="#b0aee0")
+    style.configure("TNotebook", background="#1e1e2f", tabposition='n')
+    style.configure("TNotebook.Tab", background="#2c2c3f", foreground="#ccccff", padding=(10, 5))
+    style.map("TNotebook.Tab", background=[("selected", "#5a4e91")])
+
     notebook = ttk.Notebook(root)
-    notebook.pack(fill=tk.BOTH, expand=True)
-    
-    # Pestaña Escaneo
+    notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # === Escaneo ===
     scan_tab = ttk.Frame(notebook)
     notebook.add(scan_tab, text="Escaneo")
-    
-    # Frame Escaneo de Puertos
-    port_frame = ttk.LabelFrame(scan_tab, text="Escaneo de Puertos")
-    port_frame.pack(pady=5, padx=5, fill=tk.X)
 
+    port_frame = ttk.LabelFrame(scan_tab, text="Escaneo de Puertos")
+    port_frame.pack(pady=10, padx=10, fill=tk.X)
     port_ip = crear_entrada_con_label(port_frame, "IP Objetivo:")
     port_start = crear_entrada_con_label(port_frame, "Puerto Inicial:", "1")
     port_end = crear_entrada_con_label(port_frame, "Puerto Final:", "1024")
     crear_boton(port_frame, "Iniciar Escaneo", start_port_scan)
-    
-    # Frame Escaneo de Red
+
     net_frame = ttk.LabelFrame(scan_tab, text="Escaneo de Red")
-    net_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+    net_frame.pack(pady=10, padx=10, fill=tk.X)
     net_range = crear_entrada_con_label(net_frame, "Rango de red (opcional):")
     crear_boton(net_frame, "Escanear Red", start_network_scan)
-    
-    # Pestaña Ataques
+
+    # === Ataques ===
     attack_tab = ttk.Frame(notebook)
     notebook.add(attack_tab, text="Ataques")
-    
-    # Frame Reverse Shell
+
     shell_frame = ttk.LabelFrame(attack_tab, text="Reverse Shell")
-    shell_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+    shell_frame.pack(pady=10, padx=10, fill=tk.X)
     shell_ip = crear_entrada_con_label(shell_frame, "IP Objetivo:")
     shell_port = crear_entrada_con_label(shell_frame, "Puerto:", "5000")
     crear_boton(shell_frame, "Conectar", start_reverse_shell)
-    
-    # Frame MITM
-    mitm_frame = ttk.LabelFrame(attack_tab, text="Man in the Middle")
-    mitm_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+
+    mitm_frame = ttk.LabelFrame(attack_tab, text="MITM")
+    mitm_frame.pack(pady=10, padx=10, fill=tk.X)
     mitm_target = crear_entrada_con_label(mitm_frame, "IP Víctima:")
     mitm_gateway = crear_entrada_con_label(mitm_frame, "IP Gateway:")
     mitm_btn = crear_boton(mitm_frame, "Iniciar MITM", toggle_mitm)
-    
-    # Frame DDoS
+
     ddos_frame = ttk.LabelFrame(attack_tab, text="Ataque DDoS")
-    ddos_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+    ddos_frame.pack(pady=10, padx=10, fill=tk.X)
     ddos_ip = crear_entrada_con_label(ddos_frame, "IP/Dominio Objetivo:")
     ddos_port = crear_entrada_con_label(ddos_frame, "Puerto:", "80")
     ddos_duration = crear_entrada_con_label(ddos_frame, "Duración (seg):", "30")
     crear_boton(ddos_frame, "Iniciar DDoS", start_ddos)
-    
-    # Frame Fuerza Bruta SSH
+
     brute_frame = ttk.LabelFrame(attack_tab, text="Fuerza Bruta SSH")
-    brute_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+    brute_frame.pack(pady=10, padx=10, fill=tk.X)
     brute_ip = crear_entrada_con_label(brute_frame, "IP Objetivo:")
     brute_user = crear_entrada_con_label(brute_frame, "Usuario:")
-    brute_port = crear_entrada_con_label(brute_frame, "Puerto:","22")
+    brute_port = crear_entrada_con_label(brute_frame, "Puerto:", "22")
     brute_wordlist = crear_entrada_con_label(brute_frame, "Diccionario:")
-    crear_boton(brute_frame, "Seleccionar Archivo", select_wordlist, colspan=1, pady=2)
-    crear_boton(brute_frame, "Iniciar Fuerza Bruta", start_brute_force, colspan=1, pady=2)
-    
-    # Pestaña Monitorización
+    crear_boton(brute_frame, "Seleccionar Archivo", select_wordlist)
+    crear_boton(brute_frame, "Iniciar Fuerza Bruta", start_brute_force)
+
+    # === Monitorización ===
     monitor_tab = ttk.Frame(notebook)
     notebook.add(monitor_tab, text="Monitorización")
-    
-    # Frame Sniffer
+
     sniffer_frame = ttk.LabelFrame(monitor_tab, text="Sniffer de Paquetes")
-    sniffer_frame.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
-    
+    sniffer_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
     sniffer_iface = crear_entrada_con_label(sniffer_frame, "Interfaz:", "enp4s0")
     sniffer_filter = crear_entrada_con_label(sniffer_frame, "Filtro:", "tcp")
-    sniffer_btn = crear_boton(sniffer_frame, "Iniciar Sniffer", toggle_sniffer, colspan=1, pady=2)
-    crear_boton(sniffer_frame, "Guardar Captura", save_sniffer_results, colspan=1, pady=2)
+    sniffer_btn = crear_boton(sniffer_frame, "Iniciar Sniffer", toggle_sniffer)
+    crear_boton(sniffer_frame, "Guardar Captura", save_sniffer_results)
     sniffer_output = crear_area_texto(sniffer_frame)
-    
-    # Frame Keylogger
+    sniffer_output.config(bg="#1a1a2a", fg="#d3d3f7", insertbackground="white")
+
     keylogger_frame = ttk.LabelFrame(monitor_tab, text="Keylogger")
-    keylogger_frame.pack(pady=5, padx=5, fill=tk.X)
-    
+    keylogger_frame.pack(pady=10, padx=10, fill=tk.X)
     keylogger_file = crear_entrada_con_label(keylogger_frame, "Archivo de salida:", "keylog.txt")
     keylogger_stop = crear_entrada_con_label(keylogger_frame, "Tecla de parada:", "f12")
     keylogger_btn = crear_boton(keylogger_frame, "Iniciar Keylogger", toggle_keylogger)
-    
-    # Barra de estado
-    status_bar = tk.Label(root, text="Listo", bd=1, relief=tk.SUNKEN, anchor=tk.W)
-    status_bar.pack(fill=tk.X, pady=(10, 0))
-    
+
+    # === Barra de estado ===
+    status_bar = tk.Label(root, text="Listo", bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#2b2b3d", fg="#b0aee0")
+    status_bar.pack(fill=tk.X, pady=(0, 0))
+
     root.mainloop()
+
 
 if __name__ == "__main__":
     setup_gui()
